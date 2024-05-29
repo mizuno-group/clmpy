@@ -1,0 +1,5 @@
+[console_scripts]
+clmpy.gruvae.encode = clmpy.GRU_VAE.encode:main
+clmpy.gruvae.evaluate = clmpy.GRU_VAE.evaluate:main
+clmpy.gruvae.generate = clmpy.GRU_VAE.generate:main
+clmpy.gruvae.train = clmpy.GRU_VAE.train:main

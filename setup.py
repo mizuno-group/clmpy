@@ -7,10 +7,10 @@ setup(
     include_package_data=True,
     entry_points={
         "console_scripts": [
-            "clmpy.gruvae.train=clmpy.gruvae.train:main",
-            "clmpy.gruvae.evaluate=clmpy.gruvae.evaluate:main",
-            "clmpy.gruvae.generate=clmpy.gruvae.generate:main",
-            "clmpy.gruvae.encode=clmpy.gruvae.encode:main"
+            "clmpy.gruvae.train=clmpy.GRU_VAE.train:main",
+            "clmpy.gruvae.evaluate=clmpy.GRU_VAE.evaluate:main",
+            "clmpy.gruvae.generate=clmpy.GRU_VAE.generate:main",
+            "clmpy.gruvae.encode=clmpy.GRU_VAE.encode:main"
         ]
     },
     classifiers=[

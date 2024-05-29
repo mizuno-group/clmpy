@@ -31,6 +31,20 @@ def get_args():
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     return args
 
+def get_args():
+    parser = ArgumentParser()
+    parser.add_argument("--config",type=FileType(mode="r"),default=None)
+    args = parser.parse_args()
+    config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
+    arg_dict = args.__dict__
+    for key, value in config_dict.items():
+        arg_dict[key] = value
+    args.config = args.config.name
+    args.experiment_dir = "/".join(args.config.split("/")[:-1])
+    args.token = prep_token(args)
+    args.vocab_size = args.token.length
+    return args
+
 
 class Trainer():
     def __init__(

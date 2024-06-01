@@ -15,3 +15,6 @@ clmpy/GRU_VAE/evaluate.py
 clmpy/GRU_VAE/generate.py
 clmpy/GRU_VAE/model.py
 clmpy/GRU_VAE/train.py
+clmpy/Transformer_latent/__init__.py
+clmpy/Transformer_latent/model.py
+clmpy/Transformer_latent/train.py

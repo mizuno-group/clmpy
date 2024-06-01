@@ -77,11 +77,14 @@ class Attention(GPT2Attention):
     
 class TransformerBlock(nn.Module):
     def __init__(self,config,scale=False):
+        gpt2config = GPT2Config(**config.__dict__)
+        gpt2config.n_embd = config.embedding_dim
+        super().__init__()
         nx = config.embedding_dim
         self.ln_1 = nn.LayerNorm(nx,eps=config.layer_norm_epsilon)
-        self.attn = Attention(config,scale)
+        self.attn = Attention(gpt2config,scale)
         self.ln_2 = nn.LayerNorm(nx,eps=config.layer_norm_epsilon)
-        self.mlp = GPT2MLP(4*nx,config)
+        self.mlp = GPT2MLP(4*nx,gpt2config)
     
     def forward(self,x,attention_mask=None,layer_past=None):
         # x: [L,B,D]
@@ -96,9 +99,10 @@ class TransformerBlock(nn.Module):
 
 class Encoder(nn.Module):
     def __init__(self,config):
+        super().__init__()
         nx = config.embedding_dim
         self.wte = nn.Embedding(config.vocab_size,nx)
-        self.wpe = PositionalEncoding(nx,config.dropout,max_len=config.maxlen)
+        self.wpe = PositionalEncoding(nx,config.dropout,max_len=config.n_positions)
         self.drop = nn.Dropout(config.dropout)
 
         self.h = nn.ModuleList([TransformerBlock(config,scale=True) for _ in range(config.n_layer)])
@@ -124,10 +128,7 @@ class Encoder(nn.Module):
         input_shape = x.size()
         x = x.view(-1,input_shape[-1])
         if past is None:
-            past_length = 0
             past = [None] * len(self.h)
-        else:
-            past_length = past[0][0].size(-2)
         input_embeds = self.wte(x)
         hidden_states = self.wpe(input_embeds)
         attention_mask = self.create_enc_attention_mask(x)
@@ -148,7 +149,7 @@ class Decoder(nn.Module):
         super().__init__()
         nx = config.embedding_dim
         self.wte = nn.Embedding(config.vocab_size,nx)
-        self.wpe = PositionalEncoding(nx,config.dropout,max_len=config.maxlen)
+        self.wpe = PositionalEncoding(nx,config.dropout,max_len=config.n_positions)
         self.input_proj = nn.Linear(nx,nx,bias=False)
         self.h = nn.ModuleList([TransformerBlock(config,scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(nx,eps=config.layer_norm_epsilon)
@@ -166,28 +167,25 @@ class Decoder(nn.Module):
     def forward(self,x,latent,layer_past=None):
         # x: [L,B]
         # latent: [B,D]
-        input_shape = x.size()
         if layer_past is None:
-            past_length = 0
             past = [None] * len(self.h)
-        else:
-            past_length = past[0][0].size(-2)
         attention_mask = self.create_dec_attention_mask(x)
         input_embeds = self.wte(x)
         hidden_states = self.wpe(input_embeds)
         hidden_states = hidden_states + latent.unsqueeze(1).transpose(0,1)
 
-        present = ()
+        presents = ()
         for i, (block, layer_past) in enumerate(zip(self.h,past)):
             outputs = block(hidden_states,layer_past=layer_past,attention_mask=attention_mask)
             hidden_states, present = outputs[:2]
             presents = presents + (present,)
         hidden_states = self.ln_f(hidden_states)
         hidden_states = self.output_fc(hidden_states)
+        print(hidden_states)
         return hidden_states # [L,B,V]
     
 
-class TransformerModel(nn.Module):
+class TransformerLatent(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.config = config
@@ -199,11 +197,5 @@ class TransformerModel(nn.Module):
         outputs = self.decoder(tgt,latent_space,layer_past=past)
         return outputs, latent_space
     
-def warmup_schedule(warmup):
-    def f(e):
-        if e > 0:
-            return min(e**-0.5,e*(warmup**-1.5))
-        else:
-            return 0
-    return f
+
 

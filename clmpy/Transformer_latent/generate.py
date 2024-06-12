@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240603
+# 240513
 
 import os
 from argparse import ArgumentParser, FileType
@@ -10,13 +10,13 @@ import pandas as pd
 import torch
 
 from .model import TransformerLatent
-from ..preprocess import *
+from ..preprocess import prep_token
 
 def get_args():
     parser = ArgumentParser()
-    parser.add_argument("--config",type=FileType(mode="r"),default="config.yml")
+    parser.add_argument("--config",type=FileType(mode="r"),default=None)
     parser.add_argument("--model_path",type=str,default="best_model.pt")
-    parser.add_argument("--test_path",type=str,default="data/val_10k.csv")
+    parser.add_argument("--latent_path",type=str,default="encoded.csv")
     args = parser.parse_args()
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__
@@ -29,8 +29,7 @@ def get_args():
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
-
-class Evaluator():
+class Generator():
     def __init__(self,model,args):
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
@@ -40,10 +39,11 @@ class Evaluator():
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
 
-    def _eval_batch(self,source,target,device):
-        source = source.to(device)
-        latent = self.model.encoder(source)
-        token_ids = np.zeros((self.maxlen,source.size(1)))
+    def _generate_batch(self,latent,device):
+        # latent: [B, H]
+        out = []
+        latent = latent.to(device)
+        token_ids = np.zeros((self.maxlen,latent.size(0)))
         token_ids[0:,] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
         for i in range(1,self.maxlen):
@@ -60,36 +60,35 @@ class Evaluator():
             new_id[judge] = 0
             token_ids[i,:] = new_id
         pred = token_ids[1:,:]
-        row = []
-        for s,t,v in zip(source.T,target.T,pred.T):
-            x = [self.id2sm[j.item()] for j in s]
-            y = [self.id2sm[j.item()] for j in t]
+        res = []
+        for v in pred.T:
             p = [self.id2sm[j.item()] for j in v]
-            x_str = "".join(x[1:]).split(self.id2sm[2])[0].replace("R","Br").replace("L","Cl")
-            y_str = "".join(y[1:]).split(self.id2sm[2])[0].replace("R","Br").replace("L","Cl")
             p_str = "".join(p).split(self.id2sm[2])[0].replace("R","Br").replace("L","Cl")
-            judge = True if y_str == p_str else False
-            row.append([x_str,y_str,p_str,judge])
-        return row
+            res.append(p_str)
+        return res
     
-    def evaluate(self,args,test_data):
+    def generate(self,latent,args):
         self.model.eval()
         res = []
         with torch.no_grad():
-            for source, target in test_data:
-                res.extend(self._eval_batch(source,target,args.device))
-        pred_df = pd.DataFrame(res,columns=["input","answer","predict","judge"])
-        accuracy = len(pred_df.query("judge == True")) / len(pred_df)
-        return pred_df, accuracy
+            for v in latent:
+                r = self._generate_batch(v,args.device)
+                res.extend(r)
+        return res
     
+def prep_data(args):
+    latent = pd.read_csv(args.latent_path,index_col=0)
+    latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
+    return latent
+
 def main():
     args = get_args()
-    test_loader = prep_valid_data(args)
     model = TransformerLatent(args)
-    evaluator = Evaluator(model,args)
-    results, accuracy = evaluator.evaluate(args,test_loader)
-    results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
-    print("perfect accuracy: {}".format(accuracy))
+    latent = prep_data(args)
+    generator = Generator(model,args)
+    results = generator.generate(latent,args)
+    with open(os.path.join(args.experiment_dir,"generated.txt"), "w") as f:
+        f.write("\n".join(results))
 
 if __name__ == "__main__":
     main()

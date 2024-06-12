@@ -62,12 +62,13 @@ def tokenize(smiles,token_list):
         s = s.replace("Br","R").replace("Cl","L")
         tok = []
         while len(s) > 0:
-            if len(s) > 2 and (s[0] == "@" or s[0] == "["):
+            if len(s) >= 2 and (s[0] == "@" or s[0] == "["):
                 for j in np.arange(3,0,-1):
                     if s[:j] in token_list:
                         tok.append(s[:j])
                         s = s[j:]
                         break
+                else:
                     tok.append("<unk>")
                     s = s[1:]
             else:
@@ -114,7 +115,7 @@ def seq2id(smiles,tokens,sfl=True):
 class tokens_table():
     def __init__(self,token_path):
         with open(token_path,"r") as f:
-            tokens = f.read().split("\n")
+            tokens = f.read().replace("Br","R").replace("Cl","L").split("\n")
         self.table = tokens
         self.id2sm = {i:v for i,v in enumerate(tokens)}
         self.dict = {w:v for v,w in self.id2sm.items()}

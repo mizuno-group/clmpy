@@ -9,7 +9,8 @@ import torch.nn.functional as F
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 def KLLoss(mu,log_var):
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel())
+    batch_size = mu.shape[0]
+    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
 
 class GRU_Layer(nn.Module):
     def __init__(self,embedding_dim,layer):
@@ -120,7 +121,7 @@ class GRUVAE(nn.Module):
     
     def forward(self,x,y):
         mu, log_var = self.encoder(x)
-        z = self.sampling(mu,log_var)
+        z = self.sampling(mu,log_var) # [B, H]
         out, hidden = self.decoder(y,z)
         return out, mu, log_var
 

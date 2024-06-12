@@ -157,9 +157,10 @@ class Decoder(nn.Module):
         self.device = config.device
 
     def create_dec_attention_mask(self,input_ids):
+        # input_ids: [L,B]
         l, b = input_ids.size()
-        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
-        seq_array = torch.triu(torch.full((l,l),True,device=self.device))
+        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2) # [B,1,1,L]
+        seq_array = torch.triu(torch.full((l,l),True,device=self.device),diagonal=1)
         seq_array = seq_array.unsqueeze(0).unsqueeze(1)
         res = torch.logical_or(pad_array,seq_array)
         return torch.where(res == True, float("-inf"), 0.0)
@@ -181,7 +182,6 @@ class Decoder(nn.Module):
             presents = presents + (present,)
         hidden_states = self.ln_f(hidden_states)
         hidden_states = self.output_fc(hidden_states)
-        print(hidden_states)
         return hidden_states # [L,B,V]
     
 

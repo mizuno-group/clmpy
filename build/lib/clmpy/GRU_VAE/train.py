@@ -91,26 +91,28 @@ class Trainer():
     
     def train_epoch(self,epoch,device):
         self.model.train()
-        l, l2 = 0, 0
+        l, l2 = [], []
         for source, target in self.train_data:
             source = source.to(device)
             target = target.to(device)
             l_ = self._train_batch(source,target)
-            l += l_[0]
-            l2 += l_[1]
+            l.append(l_[0])
+            l2.append(l_[1])
         self.scheduler.step()
-        return l, l2
+        return np.mean(l), np.mean(l2)
     
     def valid_epoch(self,device):
         self.model.eval()
-        l, l2 = 0, 0
+        l, l2 = [], []
         with torch.no_grad():
             for source, target in self.valid_data:
                 source = source.to(device)
                 target = target.to(device)
                 l_ = self._valid_batch(source,target)
-                l += l_[0]
-                l2 += l_[1]
+                l.append(l_[0])
+                l2.append(l_[1])
+            l = np.mean(l)
+            l2 = np.mean(l2)
             end = self.es.step(l+l2*self.beta)
         return l, l2, end
     

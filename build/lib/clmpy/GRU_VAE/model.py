@@ -35,7 +35,7 @@ class GRU_Layer(nn.Module):
                 state = state.unsqueeze(0).contiguous()
                 x, s = v(x,state) 
                 states.append(s.squeeze(0))
-        return x, torch.cat(states,axis=1)
+        return x, states
 
 
 class Encoder(nn.Module):
@@ -55,6 +55,7 @@ class Encoder(nn.Module):
 
         self.embedding = nn.Embedding(self.vocab_size,self.embedding_dim,padding_idx=0)
         self.gru = GRU_Layer(self.embedding_dim,self.enc_gru_layer)
+        self.ln = [nn.LayerNorm(v) for v in self.enc_gru_layer]
         self.mu = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.var = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.dropout = nn.Dropout(config.dropout)
@@ -63,6 +64,7 @@ class Encoder(nn.Module):
         # x: Tensor, [L,B]
         embedding = self.embedding(x) # [L,B,E]
         _, states = self.gru(self.dropout(embedding))
+        states = torch.cat([self.ln[i](v) for i,v in enumerate(states)],axis=1)
         mu = self.mu(states) # [B,H]
         log_var = self.var(states) # [B,H]
         return mu, log_var
@@ -102,14 +104,14 @@ class Decoder(nn.Module):
         hidden = torch.split(hidden,self.dec_gru_layer,dim=1)
         embedding, states = self.gru(self.dropout(embedding),hidden)
         output = self.linear_out(embedding)
-        return output, states
+        return output, torch.cat(states,axis=1)
 
     def forward(self,x,state):
         # x: [L,B]
         # state: [B,H]
         hidden = self.linear(state)
         output, states = self.gru2out(x,hidden)
-        return output, states
+        return output, torch.cat(states,axis=1)
     
 
 class GRUVAE(nn.Module):

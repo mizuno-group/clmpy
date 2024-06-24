@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240316
+# 240620
 
 import numpy as np
 import torch
@@ -7,10 +7,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-def KLLoss(mu,log_var):
-    batch_size = mu.shape[0]
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
 
 class GRU_Layer(nn.Module):
     def __init__(self,embedding_dim,layer):
@@ -36,7 +32,7 @@ class GRU_Layer(nn.Module):
                 x, s = v(x,state) 
                 states.append(s.squeeze(0))
         return x, states
-
+    
 
 class Encoder(nn.Module):
     def __init__(self,config):
@@ -56,28 +52,19 @@ class Encoder(nn.Module):
         self.embedding = nn.Embedding(self.vocab_size,self.embedding_dim,padding_idx=0)
         self.gru = GRU_Layer(self.embedding_dim,self.enc_gru_layer)
         self.ln = [nn.LayerNorm(v) for v in self.enc_gru_layer]
-        self.mu = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
-        self.var = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
+        self.linear = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.dropout = nn.Dropout(config.dropout)
 
-    def forward(self,x):
+    def forward(self,x,inference=False):
         # x: Tensor, [L,B]
         embedding = self.embedding(x) # [L,B,E]
         _, states = self.gru(self.dropout(embedding))
         states = torch.cat([self.ln[i](v) for i,v in enumerate(states)],axis=1)
-        mu = self.mu(states) # [B,H]
-        log_var = self.var(states) # [B,H]
-        return mu, log_var
-    
+        latent = self.linear(states)
+        if inference == False:
+            latent += torch.normal(0,0.05,size=states.shape).to(DEVICE)
+        return torch.tanh(latent)
 
-class Sampling(nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self,mu,log_var):
-        epsilon = torch.randn(*mu.shape).to(DEVICE)
-        return mu + torch.sqrt(torch.exp(log_var)) * epsilon
-    
 
 class Decoder(nn.Module):
     def __init__(self,config):
@@ -114,19 +101,13 @@ class Decoder(nn.Module):
         return output, torch.cat(states,axis=1)
     
 
-class GRUVAE(nn.Module):
+class GRU(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.encoder = Encoder(config)
-        self.sampling = Sampling()
         self.decoder = Decoder(config)
-    
+
     def forward(self,x,y):
-        mu, log_var = self.encoder(x)
-        z = self.sampling(mu,log_var) # [B, H]
-        out, hidden = self.decoder(y,z)
-        return out, mu, log_var
-
-
-
-
+        latent = self.encoder(x)
+        out, hidden = self.decoder(y,latent)
+        return out, latent

@@ -68,9 +68,6 @@ def tokenize(smiles,token_list):
                         tok.append(s[:j])
                         s = s[j:]
                         break
-                else:
-                    tok.append("<unk>")
-                    s = s[1:]
             else:
                 tok.append(s[0])
                 s = s[1:]

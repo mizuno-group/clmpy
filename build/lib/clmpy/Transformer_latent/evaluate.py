@@ -51,8 +51,8 @@ class Evaluator():
             out = self.model.decoder(token_ids_seq,latent)
             _, out_id = out.max(dim=2)
             new_id = out_id[-1,:]
-            is_end_token = token_ids[i-1,:] == 0
-            is_pad_token = token_ids[i-1,:] == 2
+            is_end_token = token_ids[i-1,:] == 2
+            is_pad_token = token_ids[i-1,:] == 0
             judge = torch.logical_or(is_end_token,is_pad_token)
             if judge.sum().item() == judge.numel():
                 token_ids = token_ids[:i,:]

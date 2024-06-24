@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240513
+# 240620
 
 import os
 from argparse import ArgumentParser, FileType
@@ -9,9 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .model import GRUVAE
+from .model import GRU
 from ..preprocess import prep_token
-
 
 def get_args():
     parser = ArgumentParser()
@@ -69,7 +68,7 @@ class Generator():
             p_str = "".join(p).split(self.id2sm[2])[0].replace("R","Br").replace("L","Cl")
             res.append(p_str)
         return res
-    
+
     def generate(self,latent,args):
         self.model.eval()
         res = []
@@ -78,7 +77,7 @@ class Generator():
                 r = self._generate_batch(v,args.device)
                 res.extend(r)
         return res
-           
+    
 
 def prep_data(args):
     latent = pd.read_csv(args.latent_path,index_col=0) # [B,H]
@@ -87,7 +86,7 @@ def prep_data(args):
 
 def main():
     args = get_args()
-    model = GRUVAE(args)
+    model = GRU(args)
     latent = prep_data(args)
     generator = Generator(model,args)
     results = generator.generate(latent,args)

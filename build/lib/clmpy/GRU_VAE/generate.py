@@ -43,7 +43,6 @@ class Generator():
 
     def _generate_batch(self,latent,device):
         # latent: [B, H]
-        out = []
         latent = latent.to(device)
         token_ids = np.zeros((self.maxlen,latent.size(0)))
         token_ids[0,:] = 1

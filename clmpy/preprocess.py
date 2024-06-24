@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 # 240516
 
+import argparse
+import yaml
 import pandas as pd
 import torch.nn as nn
 import torch.optim as optim
@@ -57,3 +59,15 @@ def prep_token(args):
     tokens = tokens_table(args.token_path)
     return tokens
 
+def get_notebook_args(config_file):
+    parser = argparse.ArgumentParser()
+    args = parser.parse_args("")
+    with open(config_file,"r") as f:
+        config = yaml.safe_load(f)
+    for v,w in config.items():
+        args.__dict__[v] = w
+    args.experiment_dir = "/".join(args.config.split("/")[:-1])
+    args.token = prep_token(args)
+    args.vocab_size = args.token.length
+    args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    return args

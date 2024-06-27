@@ -3,6 +3,7 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 
+
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
     fig = plt.figure(figsize=(12,7))
     ax1 = fig.add_subplot(211)
@@ -56,7 +57,7 @@ def sfl_token_list(smiles,out_path="tokens.txt"):
             lst.append(y)
     lst = list(set(lst))
     token = ['<pad>','<s>','</s>','0','1','2','3','4','5','6','7','8','9','(',')','=','#','@','*','%',
-            '.','/','\\','+','-','c','n','o','s','p','H','B','C','N','O','P','S','F','L','R','I']
+            '.','/','\\','+','-','c','n','o','s','p','H','B','C','N','O','P','S','F','Cl','Br','I']
     token.extend(sorted(lst))
     with open(out_path,"w") as f:
         f.write("\n".join(token))
@@ -123,4 +124,5 @@ class attrdict(dict):
     def __init__(self,*args,**kwargs):
         dict.__init__(self,*args,**kwargs)
         self.__dict__ = self
-    
+
+

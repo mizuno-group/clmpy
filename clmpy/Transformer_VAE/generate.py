@@ -9,9 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .model import GRUVAE
+from .model import TransformerVAE
 from ..preprocess import prep_token
-
 
 def get_args():
     parser = ArgumentParser()
@@ -30,12 +29,11 @@ def get_args():
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
-
 class Generator():
     def __init__(self,model,args):
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
-        self.maxlen = args.maxlen
+        self.maxlen = args.n_positions
         self._load(args.model_path)
 
     def _load(self,path):
@@ -43,19 +41,18 @@ class Generator():
 
     def _generate_batch(self,latent,device):
         # latent: [B, H]
+        out = []
         latent = latent.to(device)
         token_ids = np.zeros((self.maxlen,latent.size(0)))
-        token_ids[0,:] = 1
+        token_ids[0:,] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
         for i in range(1,self.maxlen):
-            token_ids_seq = token_ids[i-1,:].unsqueeze(0)
-            if i == 1:
-                output, latent = self.model.decoder(token_ids_seq,latent)
-            else:
-                output, latent = self.model.decoder.gru2out(token_ids_seq,latent)
-            _, new_id = output.max(dim=2)
-            is_end_token = token_ids_seq == 2
-            is_pad_token = token_ids_seq == 0
+            token_ids_seq = token_ids[:i,:]
+            out = self.model.decoder(token_ids_seq,latent)
+            _, out_id = out.max(dim=2)
+            new_id = out_id[-1,:]
+            is_end_token = token_ids[i-1,:] == 0
+            is_pad_token = token_ids[i-1,:] == 2
             judge = torch.logical_or(is_end_token,is_pad_token)
             if judge.sum().item() == judge.numel():
                 token_ids = token_ids[:i,:]
@@ -71,26 +68,27 @@ class Generator():
         return res
     
     def generate(self,latent,args):
-        # latent: [B, H]
         self.model.eval()
-        latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
                 r = self._generate_batch(v,args.device)
                 res.extend(r)
         return res
-           
+    
+def prep_data(args):
+    latent = pd.read_csv(args.latent_path,index_col=0)
+    latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
+    return latent
 
 def main():
     args = get_args()
-    model = GRUVAE(args)
-    latent = pd.read_csv(args.latent_path,index_col=0) # [B,H]
+    model = TransformerVAE(args)
+    latent = prep_data(args)
     generator = Generator(model,args)
     results = generator.generate(latent,args)
     with open(os.path.join(args.experiment_dir,"generated.txt"), "w") as f:
         f.write("\n".join(results))
-
 
 if __name__ == "__main__":
     main()

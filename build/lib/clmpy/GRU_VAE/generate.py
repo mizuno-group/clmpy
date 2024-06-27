@@ -71,7 +71,9 @@ class Generator():
         return res
     
     def generate(self,latent,args):
+        # latent: [B, H]
         self.model.eval()
+        latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
@@ -80,15 +82,10 @@ class Generator():
         return res
            
 
-def prep_data(args):
-    latent = pd.read_csv(args.latent_path,index_col=0) # [B,H]
-    latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
-    return latent
-
 def main():
     args = get_args()
     model = GRUVAE(args)
-    latent = prep_data(args)
+    latent = pd.read_csv(args.latent_path,index_col=0) # [B,H]
     generator = Generator(model,args)
     results = generator.generate(latent,args)
     with open(os.path.join(args.experiment_dir,"generated.txt"), "w") as f:

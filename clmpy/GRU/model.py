@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class GRU_Layer(nn.Module):
     def __init__(self,embedding_dim,layer):

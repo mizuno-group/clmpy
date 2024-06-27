@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 def KLLoss(mu,log_var):
     batch_size = mu.shape[0]
@@ -55,7 +55,7 @@ class Encoder(nn.Module):
 
         self.embedding = nn.Embedding(self.vocab_size,self.embedding_dim,padding_idx=0)
         self.gru = GRU_Layer(self.embedding_dim,self.enc_gru_layer)
-        self.ln = [nn.LayerNorm(v) for v in self.enc_gru_layer]
+        self.ln = nn.ModuleList([nn.LayerNorm(v) for v in self.enc_gru_layer])
         self.mu = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.var = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.dropout = nn.Dropout(config.dropout)
@@ -64,7 +64,7 @@ class Encoder(nn.Module):
         # x: Tensor, [L,B]
         embedding = self.embedding(x) # [L,B,E]
         _, states = self.gru(self.dropout(embedding))
-        states = torch.cat([self.ln[i](v) for i,v in enumerate(states)],axis=1)
+        states = torch.cat([w(v) for v,w in zip(states,self.ln)],axis=1)
         mu = self.mu(states) # [B,H]
         log_var = self.var(states) # [B,H]
         return mu, log_var
@@ -111,7 +111,7 @@ class Decoder(nn.Module):
         # state: [B,H]
         hidden = self.linear(state)
         output, states = self.gru2out(x,hidden)
-        return output, torch.cat(states,axis=1)
+        return output, states
     
 
 class GRUVAE(nn.Module):

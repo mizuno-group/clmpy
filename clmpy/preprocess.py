@@ -66,6 +66,7 @@ def get_notebook_args(config_file):
         config = yaml.safe_load(f)
     for v,w in config.items():
         args.__dict__[v] = w
+    args.config = config_file
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length

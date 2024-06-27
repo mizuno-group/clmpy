@@ -11,7 +11,7 @@ from transformers.modeling_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import *
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):

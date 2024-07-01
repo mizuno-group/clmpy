@@ -26,13 +26,15 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
-def encode(args,smiles):
-    model = TransformerVAE(args).to(args.device)
-    loader = prep_encode_data(args,smiles)
-    model.load_state_dict(torch.load(args.model_path))
+def encode(args,smiles,model=None):
+    if model == None:
+        model = TransformerVAE(args).to(args.device)
+        model.load_state_dict(torch.load(args.model_path))
+    loader = prep_encode_data(args,smiles)       
     model.eval()
     res = []
     with torch.no_grad():

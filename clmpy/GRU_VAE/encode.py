@@ -31,10 +31,11 @@ def get_args():
     return args
 
 
-def encode(args,smiles):
-    model = GRUVAE(args).to(args.device)
-    loader = prep_encode_data(args,smiles)
-    model.load_state_dict(torch.load(args.model_path))
+def encode(args,smiles,model=None):
+    if model == None:
+        model = GRUVAE(args).to(args.device)
+        model.load_state_dict(torch.load(args.model_path))
+    loader = prep_encode_data(args,smiles)       
     model.eval()
     res = []
     with torch.no_grad():

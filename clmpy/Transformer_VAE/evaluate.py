@@ -26,6 +26,7 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
@@ -35,8 +36,9 @@ class Evaluator():
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.n_positions
-        self._load(args.model_path)
-
+        if len(args.model_path) > 0:
+            self._load(args.model_path)
+            
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
 

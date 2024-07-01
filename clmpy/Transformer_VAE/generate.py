@@ -26,6 +26,7 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
@@ -34,7 +35,8 @@ class Generator():
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.n_positions
-        self._load(args.model_path)
+        if len(args.model_path) > 0:
+            self._load(args.model_path)
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
@@ -68,7 +70,9 @@ class Generator():
         return res
     
     def generate(self,latent,args):
+        # latent: [B, H]
         self.model.eval()
+        latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
@@ -76,15 +80,11 @@ class Generator():
                 res.extend(r)
         return res
     
-def prep_data(args):
-    latent = pd.read_csv(args.latent_path,index_col=0)
-    latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
-    return latent
 
 def main():
     args = get_args()
     model = TransformerVAE(args)
-    latent = prep_data(args)
+    latent = pd.read_csv(args.latent_path,index_col=0)
     generator = Generator(model,args)
     results = generator.generate(latent,args)
     with open(os.path.join(args.experiment_dir,"generated.txt"), "w") as f:

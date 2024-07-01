@@ -36,7 +36,8 @@ class Generator():
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.maxlen
-        self._load(args.model_path)
+        if len(args.model_path) > 0:
+            self._load(args.model_path)
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))

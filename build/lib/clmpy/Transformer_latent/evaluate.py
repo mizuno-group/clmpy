@@ -26,6 +26,7 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
@@ -35,7 +36,8 @@ class Evaluator():
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.n_positions
-        self._load(args.model_path)
+        if len(args.model_path) > 0:
+            self._load(args.model_path)
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
@@ -51,8 +53,8 @@ class Evaluator():
             out = self.model.decoder(token_ids_seq,latent)
             _, out_id = out.max(dim=2)
             new_id = out_id[-1,:]
-            is_end_token = token_ids[i-1,:] == 0
-            is_pad_token = token_ids[i-1,:] == 2
+            is_end_token = token_ids[i-1,:] == 2
+            is_pad_token = token_ids[i-1,:] == 0
             judge = torch.logical_or(is_end_token,is_pad_token)
             if judge.sum().item() == judge.numel():
                 token_ids = token_ids[:i,:]

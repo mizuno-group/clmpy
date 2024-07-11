@@ -11,7 +11,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from .model import TransformerLatent
+from .model import TransformerVAE, KLLoss
 from ..preprocess import *
 from ..utils import plot_loss
 
@@ -50,6 +50,7 @@ class Trainer():
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.es = es
+        self.beta = args.beta
         self.steps_run = 0
         self.ckpt_path = os.path.join(args.experiment_dir,"checkpoint.pt")
         if os.path.exists(self.ckpt_path):
@@ -77,73 +78,82 @@ class Trainer():
         self.optimizer.zero_grad()
         source = source.to(device)
         target = target.to(device)
-        out, _ = self.model(source,target[:-1,:])
+        out, mu, log_var = self.model(source,target[:-1,:])
         l = self.criteria(out.transpose(-2,-1),target[1:,:])
+        l2 = KLLoss(mu,log_var)
         assert (not np.isnan(l.item()))
-        l.backward()
+        (l + l2 * self.beta).backward()
         self.optimizer.step()
         self.scheduler.step()
-        return l.item()
+        return l.item(), l2.item()
     
     def _valid_batch(self,source,target,device):
         self.model.eval()
         source = source.to(device)
         target = target.to(device)
         with torch.no_grad():
-            out, _ = self.model(source,target[:-1,:])
+            out, mu, log_var = self.model(source,target[:-1,:])
             l = self.criteria(out.transpose(-2,-1),target[1:,:])
-        return l.item()
+            l2 = KLLoss(mu,log_var)
+        return l.item(), l2.item()
     
     def _train(self,args):
-        l, l2 = [], []
-        min_l2 = float("inf")
+        lt, lv, lt2, lv2 = [], [], [], []
+        min_l = float("inf")
         for datas in self.train_data:
             self.steps_run += 1
-            l_t = self._train_batch(*datas,args.device)
+            l_t, l_t2 = self._train_batch(*datas,args.device)
             if self.steps_run % args.valid_step_range == 0:
-                l_v = []
-                for v, w in self.valid_data:
-                    l_v.append(self._valid_batch(v,w,args.device))
-                l_v = np.mean(l_v)
-                l.append(l_t)
-                l2.append(l_v)
-                end = self.es.step(l_v)
-                if len(l) == 1 or l_v < min_l2:
+                l = []
+                for v,w in self.valid_data:
+                    l_v, l_v2 = self._valid_batch(v,w,args.device)
+                    l.append(l_v + l_v2 * self.beta)
+                l = np.mean(l)
+                lt.append(l_t)
+                lv.append(l_v)
+                lt2.append(l_t2)
+                lv2.append(l_v2)
+                end = self.es.step(l)
+                if l < min_l:
                     self.best_model = self.model
-                    min_l2 = l_v
+                    min_l = l
                 self._save(self.ckpt_path,self.steps_run)
-                print(f"step {self.steps_run} | train_loss: {l_t}, valid_loss: {l_v}")
+                print(f"step {self.steps_run} | train_loss: {l_t + l_t2 * self.beta}, valid_loss: {l}")
                 if end:
                     print(f"Early stopping at step {self.steps_run}")
-                    return l, l2, end
+                    return lt, lv, lt2, lv2, end
             if self.steps_run >= args.steps:
                 end = True
-                return l, l2, end
-        return l, l2, end
+                return lt, lv, lt2, lv2, end
+        return lt, lv, lt2, lv2, end
     
     def train(self,args):
         end = False
-        l, l2 = [], []
+        lt, lv, lt2, lv2 = [], [], [], []
         while end == False:
             self.train_data = prep_train_data(args)
-            a, b, end = self._train(args)
-            l.extend(a)
-            l2.extend(b)
-        return l, l2
-    
+            l_t, l_v, l_t2, l_v2, end = self._train(args)
+            lt.extend(l_t)
+            lv.extend(l_v)
+            lt2.extend(l_t2)
+            lv2.extend(l_v2)
+        return lt, lv, lt2, lv2
+        
+
 def main():
     args = get_args()
     print("loading data")
     valid_loader = prep_valid_data(args)
-    model = TransformerLatent(args)
+    model = TransformerVAE(args)
     criteria, optimizer, scheduler, es = load_train_objs_transformer(args,model)
     print("train start")
     trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
-    loss_t, loss_v = trainer.train(args)
+    loss_t, loss_v, loss_t2, loss_v2 = trainer.train(args)
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
     os.remove(trainer.ckpt_path)
     if args.plot:
-        plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
+        plot_loss(loss_t,loss_v,loss_t2,loss_v2,dir_name=args.experiment_dir)
+
 
 if __name__ == "__main__":
     ts = time.perf_counter()

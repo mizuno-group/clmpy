@@ -9,9 +9,8 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .model import GRUVAE
+from .model import TransformerVAE
 from ..preprocess import prep_encode_data, prep_token
-
 
 def get_args():
     parser = ArgumentParser()
@@ -27,24 +26,24 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
 
-
 def encode(args,smiles,model=None):
     if model == None:
-        model = GRUVAE(args).to(args.device)
+        model = TransformerVAE(args).to(args.device)
         model.load_state_dict(torch.load(args.model_path))
     loader = prep_encode_data(args,smiles)       
     model.eval()
     res = []
     with torch.no_grad():
         for v in loader:
-            mu, _ = model.encoder(v.to(args.device))
-            res.append(mu.cpu().detach().numpy())
+            latent, _ = model.encoder(v.to(args.device))
+            res.append(latent.cpu().detach().numpy())
     res = np.concatenate(res,axis=0)
     return res
-    
+
 def main():
     args = get_args()
     with open(args.smiles_path,"r") as f: # smiles_path: txt of smiles list

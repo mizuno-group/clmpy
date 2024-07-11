@@ -6,14 +6,12 @@ import numpy as np
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Variable
-from torch.nn.parameter import Parameter
 from transformers.modeling_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import *
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
@@ -193,9 +191,9 @@ class TransformerLatent(nn.Module):
         self.decoder = Decoder(config)
 
     def forward(self,src,tgt,past=None):
-        latent_space = self.encoder(src)
-        outputs = self.decoder(tgt,latent_space,layer_past=past)
-        return outputs, latent_space
+        latent = self.encoder(src)
+        outputs = self.decoder(tgt,latent,layer_past=past)
+        return outputs, latent
     
 
 

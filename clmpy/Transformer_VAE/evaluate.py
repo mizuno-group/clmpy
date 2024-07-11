@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .model import TransformerLatent
+from .model import TransformerVAE
 from ..preprocess import *
 
 def get_args():
@@ -38,13 +38,13 @@ class Evaluator():
         self.maxlen = args.n_positions
         if len(args.model_path) > 0:
             self._load(args.model_path)
-
+            
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
 
     def _eval_batch(self,source,target,device):
         source = source.to(device)
-        latent = self.model.encoder(source)
+        latent, _ = self.model.encoder(source)
         token_ids = np.zeros((self.maxlen,source.size(1)))
         token_ids[0:,] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
@@ -87,7 +87,7 @@ class Evaluator():
 def main():
     args = get_args()
     test_loader = prep_valid_data(args)
-    model = TransformerLatent(args)
+    model = TransformerVAE(args)
     evaluator = Evaluator(model,args)
     results, accuracy = evaluator.evaluate(args,test_loader)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))

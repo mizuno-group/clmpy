@@ -32,10 +32,12 @@ def get_args():
 
 class Evaluator():
     def __init__(self,model,args):
+        self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.maxlen
-        self._load(args.model_path)
+        if args.model_path:
+            self._load(args.model_path)
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))

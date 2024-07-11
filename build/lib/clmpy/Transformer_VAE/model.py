@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240527
+# 240620
 
 import math
 import numpy as np
@@ -8,10 +8,14 @@ import torch
 import torch.nn as nn
 from torch.autograd import Variable
 from transformers.modeling_utils import Conv1D
-from transformers.models.gpt2.modeling_gpt2 import *
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention, GPT2MLP
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+def KLLoss(mu,log_var):
+    batch_size = mu.shape[0]
+    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
@@ -93,7 +97,7 @@ class TransformerBlock(nn.Module):
         x = x + m
         outputs = [x] + output_attn[1:]
         return outputs
-    
+
 
 class Encoder(nn.Module):
     def __init__(self,config):
@@ -108,10 +112,11 @@ class Encoder(nn.Module):
         self.ln_mem1 = nn.LayerNorm(nx)
         self.ln_mem2 = nn.LayerNorm(nx)
         self.ln_mem3 = nn.LayerNorm(nx)
+        self.mu = nn.Linear(3*nx,config.embedding_dim)
+        self.var = nn.Linear(3*nx,config.embedding_dim)
         self.fc_latent = nn.Linear(3*nx,config.embedding_dim)
 
     def create_enc_attention_mask(self,input_ids):
-        l, b = input_ids.size()
         pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
         return torch.where(pad_array == True, float("-inf"), 0.0) # [B,1,1,L]
     
@@ -138,8 +143,18 @@ class Encoder(nn.Module):
         hidden_states = self.ln_f(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
         latent = self.memory_pool(hidden_states)
-        latent = self.fc_latent(latent)
-        return torch.tanh(latent) 
+        mu = self.mu(latent)
+        log_var = self.var(latent)
+        return mu, log_var
+    
+
+class Sampling(nn.Module):
+    def __init__(self):
+        super().__init__()
+    
+    def forward(self,mu,log_var):
+        epsilon = torch.randn(*mu.shape).to(DEVICE)
+        return mu + torch.sqrt(torch.exp(log_var)) * epsilon
     
 
 class Decoder(nn.Module):
@@ -183,17 +198,18 @@ class Decoder(nn.Module):
         return hidden_states # [L,B,V]
     
 
-class TransformerLatent(nn.Module):
+class TransformerVAE(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.config = config
         self.encoder = Encoder(config)
+        self.sampling = Sampling()
         self.decoder = Decoder(config)
 
     def forward(self,src,tgt,past=None):
-        latent = self.encoder(src)
-        outputs = self.decoder(tgt,latent,layer_past=past)
-        return outputs, latent
-    
+        mu, log_var = self.encoder(src)
+        z = self.sampling(mu,log_var)
+        out = self.decoder(tgt,z,layer_past=past)
+        return out, mu, log_var
 
 

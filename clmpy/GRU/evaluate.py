@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240603
+# 240620
 
 import os
 from argparse import ArgumentParser, FileType
@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 import torch
 
-from .model import TransformerLatent
+from .model import GRU
 from ..preprocess import *
 
 def get_args():
@@ -26,16 +26,14 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
-    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
     return args
-
 
 class Evaluator():
     def __init__(self,model,args):
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
-        self.maxlen = args.n_positions
+        self.maxlen = args.maxlen
         if len(args.model_path) > 0:
             self._load(args.model_path)
 
@@ -44,17 +42,19 @@ class Evaluator():
 
     def _eval_batch(self,source,target,device):
         source = source.to(device)
-        latent = self.model.encoder(source)
+        latent = self.model.encoder(source,inference=True)
         token_ids = np.zeros((self.maxlen,source.size(1)))
-        token_ids[0:,] = 1
+        token_ids[0,:] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
         for i in range(1,self.maxlen):
-            token_ids_seq = token_ids[:i,:]
-            out = self.model.decoder(token_ids_seq,latent)
-            _, out_id = out.max(dim=2)
-            new_id = out_id[-1,:]
-            is_end_token = token_ids[i-1,:] == 2
-            is_pad_token = token_ids[i-1,:] == 0
+            token_ids_seq = token_ids[i-1,:].unsqueeze(0)
+            if i == 1:
+                output, latent = self.model.decoder(token_ids_seq,latent)
+            else:
+                output, latent = self.model.decoder.gru2out(token_ids_seq,latent)
+            _, new_id = output.max(dim=2)
+            is_end_token = token_ids_seq == 2
+            is_pad_token = token_ids_seq == 0
             judge = torch.logical_or(is_end_token,is_pad_token)
             if judge.sum().item() == judge.numel():
                 token_ids = token_ids[:i,:]
@@ -73,7 +73,7 @@ class Evaluator():
             judge = True if y_str == p_str else False
             row.append([x_str,y_str,p_str,judge])
         return row
-    
+
     def evaluate(self,args,test_data):
         self.model.eval()
         res = []
@@ -87,11 +87,12 @@ class Evaluator():
 def main():
     args = get_args()
     test_loader = prep_valid_data(args)
-    model = TransformerLatent(args)
+    model = GRU(args)
     evaluator = Evaluator(model,args)
     results, accuracy = evaluator.evaluate(args,test_loader)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
-    print("perfect accuracy: {}".format(accuracy))
+    print("perfect accuracy: {}".format(accuracy)) 
+   
 
 if __name__ == "__main__":
     main()

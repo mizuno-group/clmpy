@@ -46,7 +46,7 @@ class Evaluator():
         source = source.to(device)
         latent, _ = self.model.encoder(source)
         token_ids = np.zeros((self.maxlen,source.size(1)))
-        token_ids[0:,] = 1
+        token_ids[0,:] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
         for i in range(1,self.maxlen):
             token_ids_seq = token_ids[:i,:]

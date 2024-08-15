@@ -12,14 +12,16 @@ from .data_handler import *
 from .utils import EarlyStopping, warmup_schedule
 
 def load_train_objs_gru(args,model):
-    criteria = nn.CrossEntropyLoss(reduction="mean")
+    criteria = nn.CrossEntropyLoss(reduction="sum")
     optimizer = optim.AdamW(model.parameters(),lr=args.lr)
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer,"min",factor=args.gamma,patience=args.patience,min_lr=1e-7)
     scheduler = optim.lr_scheduler.ExponentialLR(optimizer,gamma=args.gamma)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer,1e-7,args.lr,step_size_up=args.cycle_step,gamma=args.gamma,cycle_momentum=False)
     es = EarlyStopping(patience=args.patience)
     return criteria, optimizer, scheduler, es
 
 def load_train_objs_transformer(args,model):
-    criteria = nn.CrossEntropyLoss(reduction="mean")
+    criteria = nn.CrossEntropyLoss(reduction="sum")
     optimizer = optim.AdamW(model.parameters(),lr=args.max_lr)
     lr_schedule = warmup_schedule(args.warmup)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer,lr_schedule)

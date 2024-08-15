@@ -111,15 +111,17 @@ class Encoder(nn.Module):
         self.fc_latent = nn.Linear(3*nx,config.embedding_dim)
 
     def create_enc_attention_mask(self,input_ids):
-        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
-        return torch.where(pad_array == True, float("-inf"), 0.0) # [B,1,1,L]
+        pad_array = input_ids == 0
+        pad_array_ = pad_array.transpose(0,1).unsqueeze(1).unsqueeze(2)
+        return pad_array, torch.where(pad_array_ == True, float("-inf"), 0.0) # [B,1,1,L]
     
     def memory_pool(self,memory,pad_array):
-        mem = memory + torch.where(pad_array == True,float("-inf"),0).unsqueeze(2)
-        mem = torch.where(mem == float("-inf"), None, mem)
-        mx = torch.max(mem,dim=0)[0]
-        ave = torch.mean(mem,dim=0)
-        first = mem[0]
+        pad_array = pad_array.unsqueeze(-1)
+        masked = memory.masked_fill(pad_array,-torch.inf)
+        padding_mask = ~pad_array
+        mx = torch.max(masked,dim=0)[0]
+        ave = torch.sum(memory*padding_mask,dim=0) / torch.sum(padding_mask,dim=0)
+        first = memory[0]
         return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1)
     
     def forward(self,x,past=None):

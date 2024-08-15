@@ -94,7 +94,6 @@ class Trainer():
             target = target.to(device)
             l_ = self._train_batch(source,target)
             l.append(l_)
-        self.scheduler.step()
         return np.mean(l)
     
     def valid_epoch(self,device):
@@ -107,6 +106,7 @@ class Trainer():
                 l_ = self._valid_batch(source,target)
                 l.append(l_)
             l = np.mean(l)
+            self.scheduler.step(l)
             end = self.es.step(l)
         return l, end
     

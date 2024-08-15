@@ -81,7 +81,6 @@ class Trainer():
         out, mu, log_var = self.model(source,target[:-1,:])
         l = self.criteria(out.transpose(-2,-1),target[1:,:])
         l2 = KLLoss(mu,log_var)
-        assert (not np.isnan(l.item()))
         (l + l2 * self.beta).backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -100,6 +99,7 @@ class Trainer():
     def _train(self,args):
         lt, lv, lt2, lv2 = [], [], [], []
         min_l = float("inf")
+        end = False
         for datas in self.train_data:
             self.steps_run += 1
             l_t, l_t2 = self._train_batch(*datas,args.device)

@@ -18,7 +18,7 @@ def KLLoss(mu,log_var):
     return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
 
 class PositionalEncoding(nn.Module):
-    def __init__(self,embedding_dim,dropout,max_len=500):
+    def __init__(self,embedding_dim,dropout,max_len=300):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
 
@@ -81,6 +81,7 @@ class TransformerBlock(nn.Module):
     def __init__(self,config,scale=False):
         gpt2config = GPT2Config(**config.__dict__)
         gpt2config.n_embd = config.embedding_dim
+        gpt2config.initializer_range = 0.02
         super().__init__()
         nx = config.embedding_dim
         self.ln_1 = nn.LayerNorm(nx,eps=config.layer_norm_epsilon)
@@ -114,19 +115,20 @@ class Encoder(nn.Module):
         self.ln_mem3 = nn.LayerNorm(nx)
         self.mu = nn.Linear(3*nx,config.embedding_dim)
         self.var = nn.Linear(3*nx,config.embedding_dim)
-        self.fc_latent = nn.Linear(3*nx,config.embedding_dim)
 
     def create_enc_attention_mask(self,input_ids):
-        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
-        return pad_array, torch.where(pad_array == True, float("-inf"), 0.0) # [B,1,1,L]
+        pad_array = input_ids == 0
+        pad_array_ = pad_array.transpose(0,1).unsqueeze(1).unsqueeze(2)
+        return pad_array, torch.where(pad_array_ == True, float("-inf"), 0.0) # [B,1,1,L]
     
     def memory_pool(self,memory,pad_array):
-        mem = memory + torch.where(pad_array == True,float("-inf"),0).unsqueeze(2)
-        mem = torch.where(mem == float("-inf"), None, mem)
-        mx = torch.max(mem,dim=0)[0]
-        ave = torch.mean(mem,dim=0)
-        first = mem[0]
-        return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1)
+        pad_array = pad_array.unsqueeze(-1) #[L,B,1]
+        masked = memory.masked_fill(pad_array,-torch.inf) # [L,B,D]
+        padding_mask = ~pad_array
+        mx = torch.max(masked,dim=0)[0]
+        ave = torch.sum(memory*padding_mask,dim=0) / torch.sum(padding_mask,dim=0)
+        first = memory[0]
+        return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1) # [B,3D]
     
     def forward(self,x,past=None):
         # x: Tensor, [L,B]

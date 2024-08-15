@@ -2,6 +2,7 @@ import os
 import re
 import matplotlib.pyplot as plt
 import numpy as np
+import math
 
 
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
@@ -120,9 +121,11 @@ def warmup_schedule(warmup):
             return 0
     return f
 
+
 class attrdict(dict):
     def __init__(self,*args,**kwargs):
         dict.__init__(self,*args,**kwargs)
         self.__dict__ = self
+
 
 

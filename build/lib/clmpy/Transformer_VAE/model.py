@@ -18,7 +18,7 @@ def KLLoss(mu,log_var):
     return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
 
 class PositionalEncoding(nn.Module):
-    def __init__(self,embedding_dim,dropout,max_len=500):
+    def __init__(self,embedding_dim,dropout,max_len=300):
         super().__init__()
         self.dropout = nn.Dropout(p=dropout)
 
@@ -81,6 +81,7 @@ class TransformerBlock(nn.Module):
     def __init__(self,config,scale=False):
         gpt2config = GPT2Config(**config.__dict__)
         gpt2config.n_embd = config.embedding_dim
+        gpt2config.initializer_range = 0.02
         super().__init__()
         nx = config.embedding_dim
         self.ln_1 = nn.LayerNorm(nx,eps=config.layer_norm_epsilon)
@@ -114,17 +115,20 @@ class Encoder(nn.Module):
         self.ln_mem3 = nn.LayerNorm(nx)
         self.mu = nn.Linear(3*nx,config.embedding_dim)
         self.var = nn.Linear(3*nx,config.embedding_dim)
-        self.fc_latent = nn.Linear(3*nx,config.embedding_dim)
 
     def create_enc_attention_mask(self,input_ids):
-        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
-        return torch.where(pad_array == True, float("-inf"), 0.0) # [B,1,1,L]
+        pad_array = input_ids == 0
+        pad_array_ = pad_array.transpose(0,1).unsqueeze(1).unsqueeze(2)
+        return pad_array, torch.where(pad_array_ == True, float("-inf"), 0.0) # [B,1,1,L]
     
-    def memory_pool(self,memory):
-        mx = torch.max(memory,dim=0)[0]
-        ave = torch.mean(memory,dim=0)
+    def memory_pool(self,memory,pad_array):
+        pad_array = pad_array.unsqueeze(-1) #[L,B,1]
+        masked = memory.masked_fill(pad_array,-torch.inf) # [L,B,D]
+        padding_mask = ~pad_array
+        mx = torch.max(masked,dim=0)[0]
+        ave = torch.sum(memory*padding_mask,dim=0) / torch.sum(padding_mask,dim=0)
         first = memory[0]
-        return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1)
+        return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1) # [B,3D]
     
     def forward(self,x,past=None):
         # x: Tensor, [L,B]
@@ -134,7 +138,7 @@ class Encoder(nn.Module):
             past = [None] * len(self.h)
         input_embeds = self.wte(x)
         hidden_states = self.wpe(input_embeds)
-        attention_mask = self.create_enc_attention_mask(x)
+        pad_array, attention_mask = self.create_enc_attention_mask(x)
         output_shape = input_shape + (hidden_states.size(-1),)
 
         for i, (block, layer_past) in enumerate(zip(self.h,past)):
@@ -142,7 +146,7 @@ class Encoder(nn.Module):
             hidden_states, present = outputs[:2]
         hidden_states = self.ln_f(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
-        latent = self.memory_pool(hidden_states)
+        latent = self.memory_pool(hidden_states,pad_array)
         mu = self.mu(latent)
         log_var = self.var(latent)
         return mu, log_var

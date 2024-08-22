@@ -53,5 +53,5 @@ criteria, optimizer, scheduler, es = load_train_objs_gru(args,model)
 # possible with self-defined objects
 trainer = Trainer(args,model,train_loader,valid_loader,criteria,optimizer,scheduler,es)
 loss_t, loss_v = trainer.train(args)
-torch.save(trainer.best_model.state_dict(),<model path>))
+torch.save(trainer.best_model.state_dict(),<model path>)
 ```

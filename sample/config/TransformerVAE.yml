@@ -1,7 +1,7 @@
 # general
 batch_size: 128
 num_workers: 2
-token_path: /work/ga97/a97002/GRU_VAE/data_zinc/SFL_tokens.txt
+token_path: /workspace/GRU_VAE/data_zinc/SFL_tokens.txt
 SFL: true
 
 # model architecture
@@ -21,7 +21,7 @@ patience_step: 10000
 buckets_min: 20
 buckets_max: 120
 buckets_step: 10
-train_data: /work/ga97/a97002/GRU_VAE/data_zinc/train.csv
-valid_data: /work/ga97/a97002/GRU_VAE/data_zinc/test.csv
+train_data: /workspace/GRU_VAE/data_zinc/train.csv
+valid_data: /workspace/GRU_VAE/data_zinc/test.csv
 valid_step_range: 500
 beta: 0.01

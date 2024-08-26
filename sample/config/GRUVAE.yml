@@ -1,0 +1,30 @@
+# general
+batch_size: 1024
+num_workers: 2
+token_path: /work/ga97/a97002/GRU_VAE/data/tokens.txt
+SFL: false
+
+# model architecture
+embedding_dim: 128
+enc_gru_layer: [256,512,1024]
+latent_dim: 256
+dec_gru_layer: [256,512,1024]
+
+# train
+epochs: 50
+plot: true
+dropout: 0.1
+lr: 1.0e-3
+gamma: 0.9
+patience: 3
+beta: 0
+buckets_min: 20
+buckets_max: 200
+buckets_step: 10
+train_data: /work/ga97/a97002/GRU_VAE/data/train.csv
+valid_data: /work/ga97/a97002/GRU_VAE/data/val_100k.csv
+
+# inference
+maxlen: 500
+
+

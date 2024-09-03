@@ -30,7 +30,7 @@ def load_train_objs_transformer(args,model):
 def prep_train_data(args):
     buckets = (args.buckets_min, args.buckets_max, args.buckets_step)
     train = pd.read_csv(args.train_data,index_col=0)
-    trainset = CLM_Dataset(train["random"],train["canonical"],args)
+    trainset = CLM_Dataset(train["random"],train["canonical"],args) # メモリを抑えるオプションを入れたい
     train_sampler = BucketSampler(trainset,buckets,shuffle=True,batch_size=args.batch_size)
     train_loader = DataLoader(trainset,
                               batch_sampler=train_sampler,

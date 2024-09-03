@@ -15,6 +15,10 @@ from .model import TransformerLatent
 from ..preprocess import *
 from ..utils import plot_loss
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
 def get_args():
     parser = ArgumentParser()
     parser.add_argument("--config",type=FileType(mode="r"),default=None)
@@ -59,7 +63,7 @@ class Trainer():
     def _load(self,path):
         ckpt = torch.load(path)
         self.model.load_state_dict(ckpt["model"])
-        self.optimizer.load_state.dict(ckpt["optimizer"])
+        self.optimizer.load_state_dict(ckpt["optimizer"])
         self.scheduler.load_state_dict(ckpt["scheduler"])
         self.steps_run = ckpt["step"]
         self.es.num_bad_epochs = ckpt["num_bad_epochs"]
@@ -137,6 +141,7 @@ class Trainer():
     
 def main():
     args = get_args()
+    set_seed(args.seed)
     print("loading data")
     valid_loader = prep_valid_data(args)
     model = TransformerLatent(args)

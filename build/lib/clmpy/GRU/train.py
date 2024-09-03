@@ -6,6 +6,7 @@ from argparse import ArgumentParser, FileType
 import yaml
 import time
 
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -15,6 +16,9 @@ from .model import GRU
 from ..preprocess import *
 from ..utils import plot_loss
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
 
 def get_args():
     parser = ArgumentParser()
@@ -60,7 +64,7 @@ class Trainer():
     def _load(self,path):
         ckpt = torch.load(path)
         self.model.load_state_dict(ckpt["model"])
-        self.optimizer.load_state.dict(ckpt["optimizer"])
+        self.optimizer.load_state_dict(ckpt["optimizer"])
         self.scheduler.load_state_dict(ckpt["scheduler"])
         self.steps_run = ckpt["step"]
         self.es.num_bad_epochs = ckpt["num_bad_epochs"]
@@ -133,6 +137,7 @@ class Trainer():
 
 def main():
     args = get_args()
+    set_seed(args.seed)
     print("loading data") 
     train_loader = prep_train_data(args)
     valid_loader = prep_valid_data(args)

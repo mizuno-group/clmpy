@@ -68,7 +68,7 @@ class Trainer():
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.scheduler.load_state_dict(ckpt["scheduler"])
         self.steps_run = ckpt["step"]
-        self.es.num_bad_epochs = ckpt["num_bad_epochs"]
+        self.es.num_bad_steps = ckpt["num_bad_steps"]
         self.es.best = ckpt["es_best"]
 
     def _save(self,path,step):
@@ -77,7 +77,7 @@ class Trainer():
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
             "step": step,
-            "num_bad_ecochs": self.es.num_bad_epochs,
+            "num_bad_steps": self.es.num_bad_steps,
             "es_best": self.es.best
         }
         torch.save(ckpt,path)

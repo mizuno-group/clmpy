@@ -32,6 +32,7 @@ def get_args():
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args)
     args.vocab_size = args.token.length
+    args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     return args
 
@@ -41,7 +42,6 @@ class Trainer():
         self,
         args,
         model: nn.Module,
-        train_data: DataLoader,
         valid_data: DataLoader,
         criteria: nn.Module,
         optimizer: optim.Optimizer,
@@ -49,14 +49,14 @@ class Trainer():
         es,
     ):
         self.model = model.to(args.device)
-        self.train_data = train_data
+        self.train_data = None
         self.valid_data = valid_data
         self.criteria = criteria
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.es = es
         self.beta = args.beta
-        self.epochs_run = 0
+        self.steps_run = 0
         self.ckpt_path = os.path.join(args.experiment_dir,"checkpoint.pt")
         if os.path.exists(self.ckpt_path):
             self._load(self.ckpt_path)
@@ -82,78 +82,83 @@ class Trainer():
         }
         torch.save(ckpt,path)
 
-    def _train_batch(self,source,target):
+    def _train_batch(self,source,target,device):
+        self.model.train()
         self.optimizer.zero_grad()
-        output, mu, log_var = self.model(source,target[:-1,:])
-        l = self.criteria(output.transpose(-2,-1),target[1:,:])
+        source = source.to(device)
+        target = target.to(device)
+        out, mu, log_var = self.model(source,target[:-1,:])
+        l = self.criteria(out.transpose(-2,-1),target[1:,:])
         l2 = KLLoss(mu,log_var)
         (l + l2 * self.beta).backward()
         self.optimizer.step()
+        self.scheduler.step()
         return l.item(), l2.item()
-    
-    def _valid_batch(self,source,target):
-        output, mu, log_var = self.model(source,target[:-1,:])
-        l = self.criteria(output.transpose(-2,-1),target[1:,:])
-        l2 = KLLoss(mu,log_var)
-        return l.item(), l2.item()
-    
-    def train_epoch(self,epoch,device):
-        self.model.train()
-        l, l2 = [], []
-        for source, target in self.train_data:
-            source = source.to(device)
-            target = target.to(device)
-            l_ = self._train_batch(source,target)
-            l.append(l_[0])
-            l2.append(l_[1])
-        return np.mean(l), np.mean(l2)
-    
-    def valid_epoch(self,device):
+
+    def _valid_batch(self,source,target,device):
         self.model.eval()
-        l, l2 = [], []
+        source = source.to(device)
+        target = target.to(device)
         with torch.no_grad():
-            for source, target in self.valid_data:
-                source = source.to(device)
-                target = target.to(device)
-                l_ = self._valid_batch(source,target)
-                l.append(l_[0])
-                l2.append(l_[1])
-            l = np.mean(l)
-            l2 = np.mean(l2)
-            self.scheduler.step()
-            end = self.es.step(l+l2*self.beta)
-        return l, l2, end
-    
+            out, mu, log_var = self.model(source,target[:-1,:])
+            l = self.criteria(out.transpose(-2,-1),target[1:,:])
+            l2 = KLLoss(mu,log_var)
+        return l.item(), l2.item()
+
+    def _train(self,args):
+        lt, lv, lt2, lv2 = [], [], [], []
+        min_l = float("inf")
+        end = False
+        for datas in self.train_data:
+            self.steps_run += 1
+            l_t, l_t2 = self._train_batch(*datas,args.device)
+            if self.steps_run % args.valid_step_range == 0:
+                l = []
+                for v,w in self.valid_data:
+                    l_v, l_v2 = self._valid_batch(v,w,args.device)
+                    l.append(l_v + l_v2 * self.beta)
+                l = np.mean(l)
+                lt.append(l_t)
+                lv.append(l_v)
+                lt2.append(l_t2)
+                lv2.append(l_v2)
+                end = self.es.step(l)
+                if l < min_l:
+                    self.best_model = self.model
+                    min_l = l
+                self._save(self.ckpt_path,self.steps_run)
+                print(f"step {self.steps_run} | train_loss: {l_t + l_t2 * self.beta}, valid_loss: {l}")
+                if end:
+                    print(f"Early stopping at step {self.steps_run}")
+                    return lt, lv, lt2, lv2, end
+            if self.steps_run >= args.steps:
+                end = True
+                return lt, lv, lt2, lv2, end
+        return lt, lv, lt2, lv2, end
+
     def train(self,args):
-        loss_t, loss_t2, loss_v, loss_v2 = [], [], [], []
-        for epoch in range(self.epochs_run,args.epochs):
-            l, l2 = self.train_epoch(epoch,args.device)
-            l_v, l_v2, end = self.valid_epoch(args.device)
-            if len(loss_v) == 0 or l_v < min(loss_v):
-                self.best_model = self.model
-            loss_t.append(l)
-            loss_t2.append(l2)
-            loss_v.append(l_v)
-            loss_v2.append(l_v2)
-            self._save(self.ckpt_path,epoch)
-            print(f"epoch {epoch} | train_loss: {l+l2*self.beta}, valid_loss: {l_v+l_v2*self.beta}")
-            if end:
-                print(f"Early stopping at epoch {epoch}")
-                return loss_t, loss_t2, loss_v, loss_v2
-        return loss_t, loss_t2, loss_v, loss_v2
-            
+        end = False
+        lt, lv, lt2, lv2 = [], [], [], []
+        while end == False:
+            self.train_data = prep_train_data(args)
+            l_t, l_v, l_t2, l_v2, end = self._train(args)
+            lt.extend(l_t)
+            lv.extend(l_v)
+            lt2.extend(l_t2)
+            lv2.extend(l_v2)
+        return lt, lv, lt2, lv2
+    
 
 def main():
     args = get_args()
     set_seed(args.seed)
-    print("loading data") 
-    train_loader = prep_train_data(args)
+    print("loading data")
     valid_loader = prep_valid_data(args)
     model = GRUVAE(args)
-    criteria, optimizer, scheduler, es = load_train_objs_gru(args,model)
+    criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
-    trainer = Trainer(args,model,train_loader,valid_loader,criteria,optimizer,scheduler,es)
-    loss_t, loss_t2, loss_v, loss_v2 = trainer.train(args)
+    trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
+    loss_t, loss_v, loss_t2, loss_v2 = trainer.train(args)
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
     os.remove(trainer.ckpt_path)
     if args.plot:

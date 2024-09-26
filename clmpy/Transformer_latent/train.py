@@ -105,6 +105,7 @@ class Trainer():
     def _train(self,args):
         l, l2 = [], []
         min_l2 = float("inf")
+        end = False
         for datas in self.train_data:
             self.steps_run += 1
             l_t = self._train_batch(*datas,args.device)
@@ -145,7 +146,7 @@ def main():
     print("loading data")
     valid_loader = prep_valid_data(args)
     model = TransformerLatent(args)
-    criteria, optimizer, scheduler, es = load_train_objs_transformer(args,model)
+    criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
     trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
     loss_t, loss_v = trainer.train(args)

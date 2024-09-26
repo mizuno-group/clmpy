@@ -154,7 +154,7 @@ def main():
     print("loading data")
     valid_loader = prep_valid_data(args)
     model = TransformerVAE(args)
-    criteria, optimizer, scheduler, es = load_train_objs_transformer(args,model)
+    criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
     trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
     loss_t, loss_v, loss_t2, loss_v2 = trainer.train(args)

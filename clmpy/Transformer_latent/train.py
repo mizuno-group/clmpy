@@ -86,7 +86,7 @@ class Trainer():
         source = source.to(device)
         target = target.to(device)
         out, _ = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:])
+        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
         assert (not np.isnan(l.item()))
         l.backward()
         self.optimizer.step()
@@ -99,7 +99,7 @@ class Trainer():
         target = target.to(device)
         with torch.no_grad():
             out, _ = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:])
+            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
         return l.item()
     
     def _train(self,args):

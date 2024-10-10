@@ -49,8 +49,8 @@ def prep_encode_data(args,smiles):
                         num_workers=args.num_workers)
     return loader
 
-def prep_token(args):
-    tokens = tokens_table(args.token_path)
+def prep_token(token_path):
+    tokens = tokens_table(token_path)
     return tokens
 
 def get_notebook_args(config_file,**kwargs):

@@ -14,8 +14,7 @@ from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 def KLLoss(mu,log_var):
-    batch_size = mu.shape[0]
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / batch_size # KL loss per 1 SMILES
+    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel())
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=300):

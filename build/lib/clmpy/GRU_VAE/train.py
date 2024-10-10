@@ -30,7 +30,7 @@ def get_args():
         arg_dict[key] = value
     args.config = args.config.name
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args)
+    args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -88,8 +88,8 @@ class Trainer():
         source = source.to(device)
         target = target.to(device)
         out, mu, log_var = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:])
-        l2 = KLLoss(mu,log_var)
+        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        l2 = KLLoss(mu,log_var) / source.shape[1]
         (l + l2 * self.beta).backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -101,8 +101,8 @@ class Trainer():
         target = target.to(device)
         with torch.no_grad():
             out, mu, log_var = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:])
-            l2 = KLLoss(mu,log_var)
+            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+            l2 = KLLoss(mu,log_var) / source.shape[1]
         return l.item(), l2.item()
 
     def _train(self,args):

@@ -88,8 +88,8 @@ class Trainer():
         source = source.to(device)
         target = target.to(device)
         out, mu, log_var = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:])
-        l2 = KLLoss(mu,log_var)
+        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        l2 = KLLoss(mu,log_var) / source.shape[1]
         (l + l2 * self.beta).backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -101,8 +101,8 @@ class Trainer():
         target = target.to(device)
         with torch.no_grad():
             out, mu, log_var = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:])
-            l2 = KLLoss(mu,log_var)
+            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+            l2 = KLLoss(mu,log_var) / source.shape[1]
         return l.item(), l2.item()
 
     def _train(self,args):

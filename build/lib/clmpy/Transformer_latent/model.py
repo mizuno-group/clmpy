@@ -111,13 +111,16 @@ class Encoder(nn.Module):
         self.fc_latent = nn.Linear(3*nx,config.embedding_dim)
 
     def create_enc_attention_mask(self,input_ids):
-        l, b = input_ids.size()
-        pad_array = (input_ids == 0).transpose(0,1).unsqueeze(1).unsqueeze(2)
-        return torch.where(pad_array == True, float("-inf"), 0.0) # [B,1,1,L]
+        pad_array = input_ids == 0
+        pad_array_ = pad_array.transpose(0,1).unsqueeze(1).unsqueeze(2)
+        return pad_array, torch.where(pad_array_ == True, float("-inf"), 0.0) # [B,1,1,L]
     
-    def memory_pool(self,memory):
-        mx = torch.max(memory,dim=0)[0]
-        ave = torch.mean(memory,dim=0)
+    def memory_pool(self,memory,pad_array):
+        pad_array = pad_array.unsqueeze(-1)
+        masked = memory.masked_fill(pad_array,-torch.inf)
+        padding_mask = ~pad_array
+        mx = torch.max(masked,dim=0)[0]
+        ave = torch.sum(memory*padding_mask,dim=0) / torch.sum(padding_mask,dim=0)
         first = memory[0]
         return torch.cat([self.ln_mem1(mx),self.ln_mem2(ave),self.ln_mem3(first)],dim=1)
     
@@ -129,7 +132,7 @@ class Encoder(nn.Module):
             past = [None] * len(self.h)
         input_embeds = self.wte(x)
         hidden_states = self.wpe(input_embeds)
-        attention_mask = self.create_enc_attention_mask(x)
+        pad_array, attention_mask = self.create_enc_attention_mask(x)
         output_shape = input_shape + (hidden_states.size(-1),)
 
         for i, (block, layer_past) in enumerate(zip(self.h,past)):
@@ -137,7 +140,7 @@ class Encoder(nn.Module):
             hidden_states, present = outputs[:2]
         hidden_states = self.ln_f(hidden_states)
         hidden_states = hidden_states.view(*output_shape)
-        latent = self.memory_pool(hidden_states)
+        latent = self.memory_pool(hidden_states,pad_array)
         latent = self.fc_latent(latent)
         return torch.tanh(latent) 
     

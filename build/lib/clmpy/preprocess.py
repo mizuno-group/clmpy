@@ -11,15 +11,9 @@ from torch.utils.data import DataLoader
 from .data_handler import *
 from .utils import EarlyStopping, warmup_schedule
 
-def load_train_objs_gru(args,model):
-    criteria = nn.CrossEntropyLoss(reduction="mean")
-    optimizer = optim.AdamW(model.parameters(),lr=args.lr)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer,gamma=args.gamma)
-    es = EarlyStopping(patience=args.patience)
-    return criteria, optimizer, scheduler, es
 
-def load_train_objs_transformer(args,model):
-    criteria = nn.CrossEntropyLoss(reduction="mean")
+def load_train_objs(args,model):
+    criteria = nn.CrossEntropyLoss(reduction="sum")
     optimizer = optim.AdamW(model.parameters(),lr=args.max_lr)
     lr_schedule = warmup_schedule(args.warmup)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer,lr_schedule)
@@ -29,7 +23,7 @@ def load_train_objs_transformer(args,model):
 def prep_train_data(args):
     buckets = (args.buckets_min, args.buckets_max, args.buckets_step)
     train = pd.read_csv(args.train_data,index_col=0)
-    trainset = CLM_Dataset(train["random"],train["canonical"],args)
+    trainset = CLM_Dataset(train["random"],train["canonical"],args) # メモリを抑えるオプションを入れたい
     train_sampler = BucketSampler(trainset,buckets,shuffle=True,batch_size=args.batch_size)
     train_loader = DataLoader(trainset,
                               batch_sampler=train_sampler,
@@ -55,8 +49,8 @@ def prep_encode_data(args,smiles):
                         num_workers=args.num_workers)
     return loader
 
-def prep_token(args):
-    tokens = tokens_table(args.token_path)
+def prep_token(token_path):
+    tokens = tokens_table(token_path)
     return tokens
 
 def get_notebook_args(config_file,**kwargs):

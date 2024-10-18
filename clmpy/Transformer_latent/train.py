@@ -15,6 +15,10 @@ from .model import TransformerLatent
 from ..preprocess import *
 from ..utils import plot_loss
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
 def get_args():
     parser = ArgumentParser()
     parser.add_argument("--config",type=FileType(mode="r"),default=None)
@@ -25,7 +29,7 @@ def get_args():
         arg_dict[key] = value
     args.config = args.config.name
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args)
+    args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
@@ -62,13 +66,17 @@ class Trainer():
         self.optimizer.load_state_dict(ckpt["optimizer"])
         self.scheduler.load_state_dict(ckpt["scheduler"])
         self.steps_run = ckpt["step"]
+        self.es.num_bad_steps = ckpt["num_bad_steps"]
+        self.es.best = ckpt["es_best"]
 
     def _save(self,path,step):
         ckpt = {
             "model": self.model.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "scheduler": self.scheduler.state_dict(),
-            "step": step
+            "step": step,
+            "num_bad_steps": self.es.num_bad_steps,
+            "es_best": self.es.best
         }
         torch.save(ckpt,path)
 
@@ -78,7 +86,7 @@ class Trainer():
         source = source.to(device)
         target = target.to(device)
         out, _ = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:])
+        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
         assert (not np.isnan(l.item()))
         l.backward()
         self.optimizer.step()
@@ -91,12 +99,13 @@ class Trainer():
         target = target.to(device)
         with torch.no_grad():
             out, _ = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:])
+            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
         return l.item()
     
     def _train(self,args):
         l, l2 = [], []
         min_l2 = float("inf")
+        end = False
         for datas in self.train_data:
             self.steps_run += 1
             l_t = self._train_batch(*datas,args.device)
@@ -133,10 +142,11 @@ class Trainer():
     
 def main():
     args = get_args()
+    set_seed(args.seed)
     print("loading data")
     valid_loader = prep_valid_data(args)
     model = TransformerLatent(args)
-    criteria, optimizer, scheduler, es = load_train_objs_transformer(args,model)
+    criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
     trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
     loss_t, loss_v = trainer.train(args)

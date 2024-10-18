@@ -24,7 +24,7 @@ def get_args():
         arg_dict[key] = value
     args.config = args.config.name
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args)
+    args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.patience = args.patience_step // args.valid_step_range
     args.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -46,7 +46,7 @@ class Generator():
         out = []
         latent = latent.to(device)
         token_ids = np.zeros((self.maxlen,latent.size(0)))
-        token_ids[0:,] = 1
+        token_ids[0,:] = 1
         token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
         for i in range(1,self.maxlen):
             token_ids_seq = token_ids[:i,:]

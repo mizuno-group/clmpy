@@ -1,7 +1,7 @@
 # general
 batch_size: 1024
 num_workers: 2
-token_path: /work/ga97/a97002/GRU_VAE/data/tokens.txt
+token_path: /path/to/clmpy/sample/tokens/normal_tokens.txt
 SFL: false
 
 # model architecture
@@ -21,8 +21,8 @@ beta: 0
 buckets_min: 20
 buckets_max: 200
 buckets_step: 10
-train_data: /work/ga97/a97002/GRU_VAE/data/train.csv
-valid_data: /work/ga97/a97002/GRU_VAE/data/val_100k.csv
+train_data: /path/to/train.csv
+valid_data: /path/to/valid.csv
 
 # inference
 maxlen: 500

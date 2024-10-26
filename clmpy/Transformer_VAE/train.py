@@ -41,15 +41,16 @@ class Trainer():
         self,
         args,
         model: nn.Module,
-        valid_data: DataLoader,
+        train_data: pd.DataFrame,
+        valid_data: pd.DataFrame,
         criteria: nn.Module,
         optimizer: optim.Optimizer,
         scheduler: optim.lr_scheduler.LRScheduler,
         es
     ):
         self.model = model.to(args.device)
-        self.train_data = None
-        self.valid_data = valid_data
+        self.train_data = train_data
+        self.valid_data = prep_valid_data(args,valid_data)
         self.criteria = criteria
         self.optimizer = optimizer
         self.scheduler = scheduler
@@ -139,7 +140,7 @@ class Trainer():
         end = False
         lt, lv, lt2, lv2 = [], [], [], []
         while end == False:
-            self.train_data = prep_train_data(args)
+            self.train_data = prep_train_data(args,self.train_data)
             l_t, l_v, l_t2, l_v2, end = self._train(args)
             lt.extend(l_t)
             lv.extend(l_v)
@@ -152,11 +153,12 @@ def main():
     args = get_args()
     set_seed(args.seed)
     print("loading data")
-    valid_loader = prep_valid_data(args)
+    train_data = pd.read_csv(args.train_data,index_col=0)
+    valid_data = pd.read_csv(args.valid_data,index_col=0) 
     model = TransformerVAE(args)
     criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
-    trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
+    trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
     loss_t, loss_v, loss_t2, loss_v2 = trainer.train(args)
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
     os.remove(trainer.ckpt_path)

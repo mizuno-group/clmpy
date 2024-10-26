@@ -119,10 +119,10 @@ class tokens_table():
         self.length = len(self.table)
 
 class CLM_Dataset(Dataset):
-    def __init__(self,x,y,args):
-        self.tokens = args.token
-        self.input = seq2id(x,self.tokens,args.SFL)
-        self.output = seq2id(y,self.tokens,args.SFL)
+    def __init__(self,x,y,token,sfl):
+        self.tokens = token
+        self.input = seq2id(x,self.tokens,sfl)
+        self.output = seq2id(y,self.tokens,sfl)
         self.datanum = len(x)
 
     def __len__(self):
@@ -134,9 +134,9 @@ class CLM_Dataset(Dataset):
         return out_i, out_o
     
 class Encoder_Dataset(Dataset):
-    def __init__(self,x,args):
-        self.tokens = args.token
-        self.input = seq2id(x,self.tokens,args.SFL)
+    def __init__(self,x,token,sfl):
+        self.tokens = token
+        self.input = seq2id(x,self.tokens,sfl)
         self.datanum = len(x)
     
     def __len__(self):

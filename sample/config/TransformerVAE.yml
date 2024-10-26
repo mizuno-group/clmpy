@@ -1,7 +1,7 @@
 # general
 batch_size: 128
 num_workers: 2
-token_path: /workspace/GRU_VAE/data_zinc/SFL_tokens.txt
+token_path: /path/to/clmpy/sample/tokens/normal_tokens.txt
 SFL: true
 
 # model architecture
@@ -21,7 +21,7 @@ patience_step: 10000
 buckets_min: 20
 buckets_max: 120
 buckets_step: 10
-train_data: /workspace/GRU_VAE/data_zinc/train.csv
-valid_data: /workspace/GRU_VAE/data_zinc/test.csv
+train_data: /path/to/train.csv
+valid_data: /path/to/valid.csv
 valid_step_range: 500
 beta: 0.01

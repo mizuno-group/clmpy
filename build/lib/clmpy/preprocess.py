@@ -23,7 +23,7 @@ def load_train_objs(args,model):
 def prep_train_data(args):
     buckets = (args.buckets_min, args.buckets_max, args.buckets_step)
     train = pd.read_csv(args.train_data,index_col=0)
-    trainset = CLM_Dataset(train["random"],train["canonical"],args) # メモリを抑えるオプションを入れたい
+    trainset = CLM_Dataset(train["random"],train["canonical"],args.token,args.SFL) # メモリを抑えるオプションを入れたい
     train_sampler = BucketSampler(trainset,buckets,shuffle=True,batch_size=args.batch_size)
     train_loader = DataLoader(trainset,
                               batch_sampler=train_sampler,
@@ -33,7 +33,7 @@ def prep_train_data(args):
 
 def prep_valid_data(args):
     valid = pd.read_csv(args.valid_data,index_col=0)
-    validset = CLM_Dataset(valid["random"],valid["canonical"],args)
+    validset = CLM_Dataset(valid["random"],valid["canonical"],args.token,args.SFL)
     valid_loader = DataLoader(validset,
                               shuffle=False,
                               collate_fn=collate,

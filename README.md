@@ -46,11 +46,13 @@ from clmpy.GRU.train import Trainer
 from clmpy.preprocess import *
 
 args = get_notebook_args(<path to config.yml>)
-valid_loader = prep_valid_data(args)
+train_data = pd.read_csv(<path to train_data.csv>,index_col=0)
+valid_data = pd.read_csv(<path to valid_data.csv>,index_col=0)
+# Column names should be "input" and "output"
 model = GRU(args)
 criteria, optimizer, scheduler, es = load_train_objs_gru(args,model)
 # possible with self-defined objects
-trainer = Trainer(args,model,valid_loader,criteria,optimizer,scheduler,es)
+trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
 loss_t, loss_v = trainer.train(args)
 torch.save(trainer.best_model.state_dict(),<model path>)
 ```

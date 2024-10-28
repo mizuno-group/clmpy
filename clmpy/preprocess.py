@@ -66,7 +66,7 @@ def get_notebook_args(config_file,**kwargs):
         pass
     args.config = config_file
     args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args)
+    args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     args.model_path = ""

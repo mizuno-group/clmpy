@@ -77,6 +77,7 @@ class Evaluator():
     def evaluate(self,args,test_data):
         self.model.eval()
         res = []
+        test_data = prep_valid_data(args,test_data)
         with torch.no_grad():
             for source, target in test_data:
                 res.extend(self._eval_batch(source,target,args.device))
@@ -86,10 +87,10 @@ class Evaluator():
     
 def main():
     args = get_args()
-    test_loader = prep_valid_data(args)
+    test_data = pd.read_csv(args.test_path,index_col=0)
     model = GRU(args)
     evaluator = Evaluator(model,args)
-    results, accuracy = evaluator.evaluate(args,test_loader)
+    results, accuracy = evaluator.evaluate(args,test_data)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
     print("perfect accuracy: {}".format(accuracy)) 
    

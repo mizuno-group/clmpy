@@ -33,6 +33,7 @@ def get_args():
 
 class Evaluator():
     def __init__(self,model,args):
+        self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.n_positions

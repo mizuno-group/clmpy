@@ -33,6 +33,7 @@ def get_args():
 
 class Evaluator():
     def __init__(self,model,args):
+        self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.n_positions
@@ -74,22 +75,23 @@ class Evaluator():
             row.append([x_str,y_str,p_str,judge])
         return row
     
-    def evaluate(self,args,test_data):
+    def evaluate(self,test_data):
         self.model.eval()
         res = []
+        test_data = prep_valid_data(self.args,test_data)
         with torch.no_grad():
             for source, target in test_data:
-                res.extend(self._eval_batch(source,target,args.device))
+                res.extend(self._eval_batch(source,target,self.args.device))
         pred_df = pd.DataFrame(res,columns=["input","answer","predict","judge"])
         accuracy = len(pred_df.query("judge == True")) / len(pred_df)
         return pred_df, accuracy
     
 def main():
     args = get_args()
-    test_loader = prep_valid_data(args)
+    test_data = pd.read_csv(args.test_path,index_col=0)
     model = TransformerVAE(args)
     evaluator = Evaluator(model,args)
-    results, accuracy = evaluator.evaluate(args,test_loader)
+    results, accuracy = evaluator.evaluate(args,test_data)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
     print("perfect accuracy: {}".format(accuracy))
 

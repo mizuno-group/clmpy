@@ -1,0 +1,28 @@
+# general
+batch_size: 128
+num_workers: 2
+token_path: /work/ga97/a97002/GRU_VAE/data_zinc/SFL_tokens.txt
+SFL: true
+seed: 143
+
+# model architecture
+embedding_dim: 256 # equal to latent dim
+n_positions: 200 # equal to max length
+n_layer: 8
+n_head: 8
+layer_norm_epsilon: 1.0e-5
+
+# train
+steps: 1000000
+plot: true
+dropout: 0
+max_lr: 2.0e-2
+warmup: 8000
+patience_step: 10000
+buckets_min: 20
+buckets_max: 150
+buckets_step: 10
+train_data: /work/ga97/a97002/GRU_VAE/data_zinc/train.csv
+valid_data: /work/ga97/a97002/GRU_VAE/data_zinc/test.csv
+valid_step_range: 500
+beta: 0.01

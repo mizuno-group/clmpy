@@ -74,7 +74,7 @@ class Generator():
     def generate(self,latent):
         # latent: [B, H]
         self.model.eval()
-        latent = [torch.Tensor(latent.iloc[i:i+self.args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
+        latent = [torch.Tensor(latent.iloc[i:i+self.args.batch_size,:].values) for i in np.arange(0,len(latent),self.args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:

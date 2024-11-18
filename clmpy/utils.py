@@ -129,3 +129,23 @@ class attrdict(dict):
 
 
 
+class Evaluation():
+    def __init__(self,df):
+        self.input = df["input"]
+        self.output = df["output"]
+        self.predict = df["predict"]
+        self.judge = df["judge"]
+    
+    def perfect_accuracy(self):
+        return len(self.judge[self.judge == True]) / len(self.judge)
+    
+    def partial_accuracy(self):
+        acc = []
+        for v,w in zip(self.output,self.predict):
+            c = 0
+            for i, j in zip(v,w):
+                if i == j:
+                    c += 1
+            acc.append(c / max(len(v),len(w)))
+        mean = np.mean(acc)
+        return acc, mean

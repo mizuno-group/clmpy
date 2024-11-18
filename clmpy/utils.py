@@ -128,6 +128,28 @@ class attrdict(dict):
         self.__dict__ = self
 
 
+def chiral_count(df):
+    chiral_count = 0
+    chiral_right = 0
+    chiral_wrong = 0
+    right = 0
+    wrong = 0
+    for a, p in zip(df["answer"],df["predict"]):
+        ans = chiral_check(a)
+        if a == p:
+            right += 1
+            if len(ans) > 0:
+                chiral_right += 1
+                chiral_count += 1
+        else:
+            wrong += 1
+            if len(ans) > 0:
+                chiral_wrong += 1
+                chiral_count += 1
+    return chiral_count, chiral_right, right, chiral_wrong, wrong
+
+
+
 
 class Evaluation():
     def __init__(self,df):
@@ -149,3 +171,33 @@ class Evaluation():
             acc.append(c / max(len(v),len(w)))
         mean = np.mean(acc)
         return acc, mean
+    
+    def __chiral_check(smiles):
+        tok = []
+        while len(smiles) > 0:
+            if smiles[0] == "@":
+                if smiles[1] == "@":
+                    tok.append("@@")
+                else:
+                    tok.append("@")
+            smiles = smiles[1:]
+        return tok
+
+    def chirality(self):
+        # return: [correct and chirality, mistaken and chirality, correct and not chiral, mistaken and not chiral]
+        # The number of chiral compound = [correct and chirality] + [mistaken and chirality]
+        cc, rc, wc, rn, wn = 0,0,0,0,0
+        for v,j in zip(self.output,self.judge):
+            if len(self.__chiral_check(v)) > 0:
+                cc += 1
+                if j == True:
+                    rc += 1
+                else:
+                    wc += 1
+            else:
+                if j == True:
+                    rn += 1
+                else:
+                    wn += 1
+        return cc, rc, wc, rn, wn
+

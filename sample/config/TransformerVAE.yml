@@ -1,8 +1,9 @@
 # general
 batch_size: 128
 num_workers: 2
-token_path: /path/to/clmpy/sample/tokens/normal_tokens.txt
-SFL: true
+token_path: ../tokens/normal_tokens.txt
+SFL: false
+seed: 143
 
 # model architecture
 embedding_dim: 256 # equal to latent dim
@@ -12,14 +13,14 @@ n_head: 8
 layer_norm_epsilon: 1.0e-5
 
 # train
-steps: 500000
+steps: 1000000
 plot: true
 dropout: 0
-max_lr: 7.0e-3
+max_lr: 2.0e-2
 warmup: 8000
 patience_step: 10000
 buckets_min: 20
-buckets_max: 120
+buckets_max: 150
 buckets_step: 10
 train_data: /path/to/train.csv
 valid_data: /path/to/valid.csv

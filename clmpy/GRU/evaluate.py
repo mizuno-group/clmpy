@@ -91,7 +91,7 @@ def main():
     test_data = pd.read_csv(args.test_path,index_col=0)
     model = GRU(args)
     evaluator = Evaluator(model,args)
-    results, accuracy = evaluator.evaluate(args,test_data)
+    results, accuracy = evaluator.evaluate(test_data)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
     print("perfect accuracy: {}".format(accuracy)) 
    

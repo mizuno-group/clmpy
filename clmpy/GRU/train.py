@@ -103,11 +103,11 @@ class Trainer():
             l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
         return l.item()
     
-    def _train(self,args):
+    def _train(self,args,train_data):
         l, l2 = [], []
         min_l2 = float("inf")
         end = False
-        for datas in self.train_data:
+        for datas in train_data:
             self.steps_run += 1
             l_t = self._train_batch(*datas,args.device)
             if self.steps_run % args.valid_step_range == 0:
@@ -135,8 +135,8 @@ class Trainer():
         end = False
         l, l2 = [], []
         while end == False:
-            self.train_data = prep_train_data(args,self.train_data)
-            a, b, end = self._train(args)
+            train_data = prep_train_data(args,self.train_data)
+            a, b, end = self._train(args,train_data)
             l.extend(a)
             l2.extend(b)
         return l, l2

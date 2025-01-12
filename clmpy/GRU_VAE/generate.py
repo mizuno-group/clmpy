@@ -33,6 +33,7 @@ def get_args():
 
 class Generator():
     def __init__(self,model,args):
+        self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.maxlen
@@ -71,14 +72,14 @@ class Generator():
             res.append(p_str)
         return res
     
-    def generate(self,latent,args):
+    def generate(self,latent):
         # latent: [B, H]
         self.model.eval()
-        latent = [torch.Tensor(latent.iloc[i:i+args.batch_size,:].values) for i in np.arange(0,len(latent),args.batch_size)]
+        latent = [torch.Tensor(latent.iloc[i:i+self.args.batch_size,:].values) for i in np.arange(0,len(latent),self.args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
-                r = self._generate_batch(v,args.device)
+                r = self._generate_batch(v,self.args.device)
                 res.extend(r)
         return res
            

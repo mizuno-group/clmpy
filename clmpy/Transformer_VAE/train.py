@@ -105,11 +105,11 @@ class Trainer():
             l2 = KLLoss(mu,log_var) / source.shape[1]
         return l.item(), l2.item()
     
-    def _train(self,args):
+    def _train(self,args,train_data):
         lt, lv, lt2, lv2 = [], [], [], []
         min_l = float("inf")
         end = False
-        for datas in self.train_data:
+        for datas in train_data:
             self.steps_run += 1
             l_t, l_t2 = self._train_batch(*datas,args.device)
             if self.steps_run % args.valid_step_range == 0:
@@ -140,8 +140,8 @@ class Trainer():
         end = False
         lt, lv, lt2, lv2 = [], [], [], []
         while end == False:
-            self.train_data = prep_train_data(args,self.train_data)
-            l_t, l_v, l_t2, l_v2, end = self._train(args)
+            train_data = prep_train_data(args,self.train_data)
+            l_t, l_v, l_t2, l_v2, end = self._train(args,train_data)
             lt.extend(l_t)
             lv.extend(l_v)
             lt2.extend(l_t2)

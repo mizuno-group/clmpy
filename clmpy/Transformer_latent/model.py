@@ -198,5 +198,33 @@ class TransformerLatent(nn.Module):
         outputs = self.decoder(tgt,latent,layer_past=past)
         return outputs, latent
     
+class MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config  = config
+        nx = config.embedding_dim
+        self.classifier = nn.Sequential(
+            nn.Linear(nx ,500),
+            nn.ReLU(),
+            nn.Linear(500, 500),
+            nn.ReLU(),
+            nn.Linear(500, 1),
+        )
 
+    def forward(self, x, ):
+        x = self.classifier(x)
+        return x
 
+class TransformerLatent_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.encoder = Encoder(config)
+        self.decoder = Decoder(config)
+        self.mlp = MLP(config)
+
+    def forward(self,src, tgt,past=None):
+        latent_space = self.encoder(src)
+        outputs_rec = self.decoder(tgt,latent_space,layer_past=past)
+        outputs_bin = self.mlp(latent_space)
+        return outputs_rec, outputs_bin

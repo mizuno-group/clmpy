@@ -1,0 +1,30 @@
+# general
+batch_size: 128
+num_workers: 1
+token_path: ../tokens/normal_tokens.txt
+SFL: true
+seed: 143
+# model architecture
+embedding_dim: 256 # equal to latent dim
+n_positions: 350 # equal to max length
+n_layer: 8
+n_head: 8
+layer_norm_epsilon: 1.0e-5
+
+# train
+steps: 2000
+plot: true
+dropout: 0
+max_lr: 2.0e-2
+warmup: 8000
+patience_step: 1000
+buckets_min: 10
+buckets_max: 340
+buckets_step: 10
+valid_step_range: 500
+
+train_data: /workspace/clmpy/data/mlp/13_CYP2D6_Veith.csv
+valid_data: /workspace/clmpy/data/mlp/13_CYP2D6_Veith.csv
+
+beta: 1
+gamma: 1

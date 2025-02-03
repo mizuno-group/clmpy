@@ -28,8 +28,9 @@ class BucketSampler(Sampler):
         bucket_max = max(np.array(buc))
         for i,v in enumerate(buc):
             bucs[v.item()].append(i)
-        _ = bucs.pop(bucket_max)
+        #_ = bucs.pop(bucket_max)
         
+        # remove empty bucket
         self.buckets = dict()
         for bucket_size, bucket in bucs.items():
             if len(bucket) > 0:
@@ -37,6 +38,7 @@ class BucketSampler(Sampler):
         self.__iter__()
 
     def __iter__(self):
+        # permutation in each bucket
         for bucket_size in self.buckets.keys():
             self.buckets[bucket_size] = self.buckets[bucket_size][torch.randperm(self.buckets[bucket_size].nelement())]
 
@@ -49,6 +51,7 @@ class BucketSampler(Sampler):
             batches += curr_bucket
 
         self.length = len(batches)
+        # permutation of all batches
         if self.shuffle == True:
             random.shuffle(batches)
         return iter(batches)

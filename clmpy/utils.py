@@ -128,29 +128,6 @@ class attrdict(dict):
         self.__dict__ = self
 
 
-def chiral_count(df):
-    chiral_count = 0
-    chiral_right = 0
-    chiral_wrong = 0
-    right = 0
-    wrong = 0
-    for a, p in zip(df["answer"],df["predict"]):
-        ans = chiral_check(a)
-        if a == p:
-            right += 1
-            if len(ans) > 0:
-                chiral_right += 1
-                chiral_count += 1
-        else:
-            wrong += 1
-            if len(ans) > 0:
-                chiral_wrong += 1
-                chiral_count += 1
-    return chiral_count, chiral_right, right, chiral_wrong, wrong
-
-
-
-
 class Evaluation():
     def __init__(self,df):
         self.input = df["input"]

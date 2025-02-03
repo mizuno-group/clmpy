@@ -4,8 +4,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import math
 
-from .data_handler import seq2id
-
 
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
     fig = plt.figure(figsize=(12,7))
@@ -140,7 +138,7 @@ class Evaluation():
     def perfect_accuracy(self):
         return len(self.judge[self.judge == True]) / len(self.judge)
     
-    def partial_accuracy_character(self):
+    def partial_accuracy(self):
         acc = []
         for v,w in zip(self.output,self.predict):
             c = 0
@@ -150,20 +148,6 @@ class Evaluation():
             acc.append(c / max(len(v),len(w)))
         mean = np.mean(acc)
         return acc, mean
-
-    def partial_accuracy_token(self,token,sfl=True):
-        acc = []
-        onehot_out = seq2id(self.output,token,sfl)
-        onehot_pred = seq2id(self.predict,token,sfl)
-        for v,w in zip(onehot_out,onehot_pred):
-            c = 0
-            for i, j in zip(v,w):
-                if i == j:
-                    c += 1
-            acc.append(c / max(len(v),len(w)))
-        mean = np.mean(acc)
-        return acc, mean
-
     
     def __chiral_check(smiles):
         tok = []

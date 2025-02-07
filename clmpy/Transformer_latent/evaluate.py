@@ -18,16 +18,15 @@ def get_args():
     parser.add_argument("--model_path",type=str,default="best_model.pt")
     parser.add_argument("--test_path",type=str,default="data/val_10k.csv")
     args = parser.parse_args()
+    args.config = args.config.name
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__
     for key, value in config_dict.items():
         arg_dict[key] = value
-    args.config = args.config.name
-    args.experiment_dir = "/".join(args.config.split("/")[:-1])
     args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.patience = args.patience_step // args.valid_step_range
-    args.device = "cuda" if torch.cuda.is_available() else "cpu"
+    args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     return args
 
 

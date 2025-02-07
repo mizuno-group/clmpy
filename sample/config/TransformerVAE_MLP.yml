@@ -4,6 +4,8 @@ num_workers: 1
 token_path: ../tokens/normal_tokens.txt
 SFL: true
 seed: 143
+log: True
+
 # model architecture
 embedding_dim: 256 # equal to latent dim
 n_positions: 350 # equal to max length

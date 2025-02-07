@@ -21,9 +21,12 @@ def load_train_objs(args,model):
     es = EarlyStopping(patience=args.patience)
     return criteria, criteria_mlp, optimizer, scheduler, es
 
-def prep_train_data(args,train_data):
+def prep_train_data(args,train_data,downstream=False):
     buckets = (args.buckets_min, args.buckets_max, args.buckets_step)
-    trainset = CLM_Dataset(train_data["random"],train_data["canonical"],args.token,args.SFL) # メモリを抑えるオプションを入れたい
+    if downstream == True:
+        trainset = CLM_Dataset(train_data["input"],train_data["output"],train_data["y"],args.token,args.SFL)
+    else:
+        trainset = CLM_Dataset(train_data["input"],train_data["output"],args.token,args.SFL)
     train_sampler = BucketSampler(trainset,buckets,shuffle=True,batch_size=args.batch_size)
     train_loader = DataLoader(trainset,
                               batch_sampler=train_sampler,
@@ -31,8 +34,11 @@ def prep_train_data(args,train_data):
                               num_workers=args.num_workers)
     return train_loader
 
-def prep_valid_data(args,valid_data):
-    validset = CLM_Dataset(valid_data["random"],valid_data["canonical"],args.token,args.SFL)
+def prep_valid_data(args,valid_data,downstream=False):
+    if downstream == True:
+        validset = CLM_Dataset(valid_data["input"],valid_data["output"],valid_data["y"],args.token,args.SFL)
+    else:
+        validset = CLM_Dataset(valid_data["input"],valid_data["output"],args.token,args.SFL)
     valid_loader = DataLoader(validset,
                               shuffle=False,
                               collate_fn=collate,
@@ -72,22 +78,3 @@ def get_notebook_args(config_file,**kwargs):
     args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
     args.model_path = ""
     return args
-
-def prep_train_data_mlp(args,train_data):
-    buckets = (args.buckets_min, args.buckets_max, args.buckets_step)
-    trainset = CLM_Dataset_MLP(train_data["random"],train_data["canonical"],train_data["y"],args.token,args.SFL) # メモリを抑えるオプションを入れたい
-    train_sampler = BucketSampler_MLP(trainset,buckets,shuffle=True,batch_size=args.batch_size)
-    train_loader = DataLoader(trainset,
-                              batch_sampler=train_sampler,
-                              collate_fn=collate_MLP,
-                              num_workers=args.num_workers)
-    return train_loader
-
-def prep_valid_data_mlp(args,valid_data):
-    validset = CLM_Dataset_MLP(valid_data["random"],valid_data["canonical"],valid_data["y"],args.token,args.SFL)
-    valid_loader = DataLoader(validset,
-                              shuffle=False,
-                              collate_fn=collate_MLP,
-                              batch_size=args.batch_size,
-                              num_workers=args.num_workers)
-    return valid_loader

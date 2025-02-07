@@ -51,6 +51,7 @@ class Trainer():
         scheduler: optim.lr_scheduler.LRScheduler,
         es,
     ):
+        self.args = args
         self.model = model.to(args.device)
         self.train_data = train_data
         self.valid_data = prep_valid_data(args,valid_data)
@@ -133,12 +134,12 @@ class Trainer():
                 return l, l2, end
         return l, l2, end
     
-    def train(self,args):
+    def train(self):
         end = False
         l, l2 = [], []
         while end == False:
-            train_data = prep_train_data(args,self.train_data)
-            a, b, end = self._train(args,train_data)
+            train_data = prep_train_data(self.args,self.train_data)
+            a, b, end = self._train(self.args,train_data)
             l.extend(a)
             l2.extend(b)
         return l, l2

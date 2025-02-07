@@ -231,4 +231,4 @@ class TransformerLatent_MLP(nn.Module):
         latent = self.encoder(src)
         out = self.decoder(tgt,latent,layer_past=past)
         out_d = self.mlp(latent)
-        return out, out_d
+        return out, out_d, latent

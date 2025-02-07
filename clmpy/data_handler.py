@@ -26,10 +26,8 @@ class BucketSampler(Sampler):
         buc = torch.bucketize(torch.tensor(length),torch.tensor(bucket_range),right=False)
 
         bucs = defaultdict(list)
-        bucket_max = max(np.array(buc))
         for i,v in enumerate(buc):
             bucs[v.item()].append(i)
-        #_ = bucs.pop(bucket_max)
         
         # remove empty bucket
         self.buckets = dict()
@@ -59,7 +57,6 @@ class BucketSampler(Sampler):
 
     def __len__(self):
         return self.length
-    
 
 
 def tokenize(smiles,token_list):
@@ -139,6 +136,24 @@ class CLM_Dataset(Dataset):
         out_o = self.output[idx]
         return out_i, out_o
     
+class CLM_Dataset_MLP(Dataset):
+    def __init__(self,x,y,binary,token,sfl):
+        self.tokens = token
+        self.input = seq2id(x,self.tokens,sfl)
+        self.output = seq2id(y,self.tokens,sfl)
+        self.output_y = torch.tensor(binary, dtype=torch.long)  # torch.Tensorに変換
+        self.datanum = len(x)
+
+    def __len__(self):
+        return self.datanum
+
+    def __getitem__(self, idx):
+        out_i = self.input[idx]
+        out_o = self.output[idx]
+        bin = self.output_y[idx]  # 修正: iloc を削除
+        
+        return out_i, out_o, bin
+    
 class Encoder_Dataset(Dataset):
     def __init__(self,x,token,sfl):
         self.tokens = token
@@ -168,78 +183,13 @@ def encoder_collate(batch):
     xs = pad_sequence(xs,batch_first=False,padding_value=0)
     return xs
 
-class CLM_Dataset_MLP(Dataset):
-    def __init__(self,x,y,binary,token,sfl):
-        self.tokens = token
-        self.input = seq2id(x,self.tokens,sfl)
-        self.output = seq2id(y,self.tokens,sfl)
-        self.output_y = torch.tensor(binary, dtype=torch.long)  # torch.Tensorに変換
-        self.datanum = len(x)
-
-    def __len__(self):
-        return self.datanum
-
-    def __getitem__(self, idx):
-        out_i = self.input[idx]
-        out_o = self.output[idx]
-        bin = self.output_y[idx]  # 修正: iloc を削除
-        
-        return (out_i, out_o), bin
-
-
-class BucketSampler_MLP(Sampler):
-    def __init__(self,dataset,buckets=(20,150,10),shuffle=True,batch_size=512,drop_last=True):
-        super().__init__(dataset)
-        self.shuffle = shuffle
-        self.batch_size = batch_size
-        self.drop_last = drop_last
-        length = [len(v[0][0]) for v in dataset]
-
-        bucket_range = np.arange(*buckets)
-        
-        assert isinstance(buckets,tuple)
-        bmin, bmax, bstep = buckets
-        assert (bmax - bmin) % bstep == 0
-        buc = torch.bucketize(torch.tensor(length),torch.tensor(bucket_range),right=False)
-
-        bucs = defaultdict(list)
-        bucket_max = max(np.array(buc))
-        for i,v in enumerate(buc):
-            bucs[v.item()].append(i)
-        _ = bucs.pop(bucket_max)
-        
-        self.buckets = dict()
-        for bucket_size, bucket in bucs.items():
-            if len(bucket) > 0:
-                self.buckets[bucket_size] = torch.tensor(bucket,dtype=torch.int)
-        self.__iter__()
-
-    def __iter__(self):
-        for bucket_size in self.buckets.keys():
-            self.buckets[bucket_size] = self.buckets[bucket_size][torch.randperm(self.buckets[bucket_size].nelement())]
-
-        batches = []
-        for bucket in self.buckets.values():
-            curr_bucket = torch.split(bucket,self.batch_size)
-            if len(curr_bucket) > 1 and self.drop_last == True:
-                if len(curr_bucket[-1]) < len(curr_bucket[-2]):
-                    curr_bucket = curr_bucket[:-1]
-            batches += curr_bucket
-        self.length = len(batches)
-        if self.shuffle == True:
-            random.shuffle(batches)
-        return iter(batches)
-
-    def __len__(self):
-        return self.length
-
 def collate_MLP(batch):
-    xs, ys , bins= [], [], []
-    for (x,y), bin in batch:
+    xs, ys, bins= [], [], []
+    for x,y,bin in batch:
         xs.append(torch.LongTensor(x))
         ys.append(torch.LongTensor(y))
         bins.append(bin)
     xs = pad_sequence(xs,batch_first=False,padding_value=0)
     ys = pad_sequence(ys,batch_first=False,padding_value=0)
     bins = torch.tensor(bins)
-    return (xs, ys), bins
+    return xs, ys, bins

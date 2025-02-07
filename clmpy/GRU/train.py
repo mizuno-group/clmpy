@@ -23,6 +23,9 @@ def set_seed(seed):
 def get_args():
     parser = ArgumentParser()
     parser.add_argument("--config",type=FileType(mode="r"),default=None)
+    parser.add_argument("--train_data",type=str,default=None)
+    parser.add_argument("--valid_data",type=str,default=None)
+    parser.add_argument("--experiment_dir",type=str,default=None)
     args = parser.parse_args()
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__

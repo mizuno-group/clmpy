@@ -11,22 +11,8 @@ import torch
 
 from .model import GRU
 from ..preprocess import *
+from ..get_args import get_argument
 
-def get_args():
-    parser = ArgumentParser()
-    parser.add_argument("--config",type=FileType(mode="r"),default="config.yml")
-    parser.add_argument("--model_path",type=str,default="best_model.pt")
-    parser.add_argument("--test_path",type=str,default="data/val_10k.csv")
-    args = parser.parse_args()
-    args.config = args.config.name
-    config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
-    arg_dict = args.__dict__
-    for key, value in config_dict.items():
-        arg_dict[key] = value
-    args.token = prep_token(args.token_path)
-    args.vocab_size = args.token.length
-    args.device = "cuda" if torch.cuda.is_available() else "cpu"
-    return args
 
 class Evaluator():
     def __init__(self,model,args):
@@ -86,7 +72,7 @@ class Evaluator():
         return pred_df, accuracy
     
 def main():
-    args = get_args()
+    args = get_argument()
     test_data = pd.read_csv(args.test_path,index_col=0)
     model = GRU(args)
     evaluator = Evaluator(model,args)

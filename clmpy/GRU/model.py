@@ -6,7 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class GRU_Layer(nn.Module):
     def __init__(self,embedding_dim,layer):
@@ -48,12 +47,14 @@ class Encoder(nn.Module):
         self.vocab_size = config.vocab_size
         self.embedding_dim = config.embedding_dim
         self.latent_dim = config.latent_dim
+        self.device = config.device
 
         self.embedding = nn.Embedding(self.vocab_size,self.embedding_dim,padding_idx=0)
         self.gru = GRU_Layer(self.embedding_dim,self.enc_gru_layer)
         self.ln = nn.ModuleList([nn.LayerNorm(v) for v in self.enc_gru_layer])
         self.linear = nn.Linear(sum(self.enc_gru_layer),self.latent_dim)
         self.dropout = nn.Dropout(config.dropout)
+        
 
     def forward(self,x,inference=False):
         # x: Tensor, [L,B]
@@ -62,7 +63,7 @@ class Encoder(nn.Module):
         states = torch.cat([w(v) for v,w in zip(states,self.ln)],axis=1)
         latent = self.linear(states)
         if inference == False:
-            latent += torch.normal(0,0.05,size=latent.shape).to(DEVICE)
+            latent += torch.normal(0,0.05,size=latent.shape).to(self.device)
         return torch.tanh(latent)
 
 

@@ -11,23 +11,7 @@ import torch
 
 from .model import GRU
 from ..preprocess import prep_token
-
-def get_args():
-    parser = ArgumentParser()
-    parser.add_argument("--config",type=FileType(mode="r"),default=None)
-    parser.add_argument("--model_path",type=str,default="best_model.pt")
-    parser.add_argument("--latent_path",type=str,default="encoded.csv")
-    args = parser.parse_args()
-    config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
-    arg_dict = args.__dict__
-    for key, value in config_dict.items():
-        arg_dict[key] = value
-    args.config = args.config.name
-    args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args.token_path)
-    args.vocab_size = args.token.length
-    args.device = "cuda" if torch.cuda.is_available() else "cpu"
-    return args
+from ..get_args import get_argument
 
 
 class Generator():
@@ -38,16 +22,17 @@ class Generator():
         self.maxlen = args.maxlen
         if len(args.model_path) > 0:
             self._load(args.model_path)
+        self.device = args.device
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
 
-    def _generate_batch(self,latent,device):
+    def _generate_batch(self,latent):
         # latent: [B, H]
-        latent = latent.to(device)
+        latent = latent.to(self.device)
         token_ids = np.zeros((self.maxlen,latent.size(0)))
         token_ids[0,:] = 1
-        token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
+        token_ids = torch.tensor(token_ids,dtype=torch.long).to(self.device)
         for i in range(1,self.maxlen):
             token_ids_seq = token_ids[i-1,:].unsqueeze(0)
             if i == 1:
@@ -74,22 +59,24 @@ class Generator():
     def generate(self,latent):
         # latent: [B, H]
         self.model.eval()
-        latent = [torch.Tensor(latent.iloc[i:i+self.args.batch_size,:].values) for i in np.arange(0,len(latent),self.args.batch_size)]
+        latent_arr = latent.values
+        latent = [torch.Tensor(latent_arr[i:i+self.args.batch_size,:]) for i in np.arange(0,len(latent),self.args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
-                r = self._generate_batch(v,self.args.device)
+                r = self._generate_batch(v)
                 res.extend(r)
         return res
 
 
 def main():
-    args = get_args()
+    args = get_argument()
     model = GRU(args)
     latent = pd.read_csv(args.latent_path,index_col=0)
     generator = Generator(model,args)
-    results = generator.generate(latent,args)
-    with open(os.path.join(args.experiment_dir,"generated.txt"), "w") as f:
+    results = generator.generate(latent)
+    output_path = os.path.join(args.experiment_dir,"generated.txt") if len(args.output_path) == 0 else args.output_path
+    with open(output_path, "w") as f:
         f.write("\n".join(results))
 
 

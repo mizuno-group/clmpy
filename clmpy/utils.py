@@ -3,8 +3,9 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import torch
 
-
+"""
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
     fig = plt.figure(figsize=(12,7))
     ax1 = fig.add_subplot(211)
@@ -37,7 +38,7 @@ def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
         h4, l4 = ax4.get_legend_handles_labels()
         ax2.legend(h2+h4,l2+l4)
     plt.savefig(os.path.join(dir_name,"loss.png"),bbox_inches="tight")
-
+"""
 
 def generate_uniform_random(dim,n,low=-1,high=1):
     # dim: int, dimension of latent vector
@@ -122,12 +123,6 @@ def warmup_schedule(warmup):
     return f
 
 
-class attrdict(dict):
-    def __init__(self,*args,**kwargs):
-        dict.__init__(self,*args,**kwargs)
-        self.__dict__ = self
-
-
 class Evaluation():
     def __init__(self,df):
         self.input = df["input"]
@@ -178,3 +173,6 @@ class Evaluation():
                     wn += 1
         return cc, rc, wc, rn, wn
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)

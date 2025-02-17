@@ -137,11 +137,11 @@ class CLM_Dataset(Dataset):
         return out_i, out_o
     
 class CLM_Dataset_MLP(Dataset):
-    def __init__(self,x,y,binary,token,sfl):
+    def __init__(self,x,y,target,token,sfl):
         self.tokens = token
         self.input = seq2id(x,self.tokens,sfl)
         self.output = seq2id(y,self.tokens,sfl)
-        self.output_y = torch.tensor(binary, dtype=torch.long)  # torch.Tensorに変換
+        self.output_d = torch.tensor(target, dtype=torch.long)  # torch.Tensorに変換
         self.datanum = len(x)
 
     def __len__(self):
@@ -150,7 +150,7 @@ class CLM_Dataset_MLP(Dataset):
     def __getitem__(self, idx):
         out_i = self.input[idx]
         out_o = self.output[idx]
-        bin = self.output_y[idx]  # 修正: iloc を削除
+        bin = self.output_y[idx]
         
         return out_i, out_o, bin
     
@@ -184,12 +184,12 @@ def encoder_collate(batch):
     return xs
 
 def collate_MLP(batch):
-    xs, ys, bins= [], [], []
-    for x,y,bin in batch:
+    xs, ys, targets = [], [], []
+    for x,y,tgt in batch:
         xs.append(torch.LongTensor(x))
         ys.append(torch.LongTensor(y))
-        bins.append(bin)
+        targets.append(tgt)
     xs = pad_sequence(xs,batch_first=False,padding_value=0)
     ys = pad_sequence(ys,batch_first=False,padding_value=0)
-    bins = torch.tensor(bins)
-    return xs, ys, bins
+    targets = torch.tensor(targets)
+    return xs, ys, targets

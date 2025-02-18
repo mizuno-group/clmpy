@@ -20,18 +20,19 @@ class Evaluator():
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
         self.maxlen = args.maxlen
+        self.device = args.device
         if len(args.model_path) > 0:
             self._load(args.model_path)
 
     def _load(self,path):
         self.model.load_state_dict(torch.load(path))
 
-    def _eval_batch(self,source,target,device):
-        source = source.to(device)
+    def _eval_batch(self,source,target):
+        source = source.to(self.device)
         latent = self.model.encoder(source,inference=True)
         token_ids = np.zeros((self.maxlen,source.size(1)))
         token_ids[0,:] = 1
-        token_ids = torch.tensor(token_ids,dtype=torch.long).to(device)
+        token_ids = torch.tensor(token_ids,dtype=torch.long).to(self.device)
         for i in range(1,self.maxlen):
             token_ids_seq = token_ids[i-1,:].unsqueeze(0)
             if i == 1:
@@ -75,7 +76,7 @@ def main():
     args = get_argument()
     test_data = pd.read_csv(args.test_path,index_col=0)
     model = GRU(args)
-    evaluator = Evaluator(model,args)
+    evaluator = Evaluator(args,model)
     results, accuracy = evaluator.evaluate(test_data)
     results.to_csv(os.path.join(args.experiment_dir,"evaluate_result.csv"))
     print("perfect accuracy: {}".format(accuracy)) 

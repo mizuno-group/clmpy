@@ -150,7 +150,7 @@ class CLM_Dataset_MLP(Dataset):
     def __getitem__(self, idx):
         out_i = self.input[idx]
         out_o = self.output[idx]
-        bin = self.output_y[idx]
+        bin = self.output_d[idx]
         
         return out_i, out_o, bin
     

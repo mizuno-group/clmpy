@@ -13,28 +13,8 @@ from torch.utils.data import DataLoader
 
 from .model import TransformerLatent_MLP
 from ..preprocess import *
-from ..utils import plot_loss
-
-def set_seed(seed):
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-
-def get_args():
-    parser = ArgumentParser()
-    parser.add_argument("--config",type=FileType(mode="r"),default=None)
-    parser.add_argument("--model_path",type=str, default=None) #configに書くのもOK
-    args = parser.parse_args()
-    config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
-    arg_dict = args.__dict__
-    for key, value in config_dict.items():
-        arg_dict[key] = value
-    args.config = args.config.name
-    args.experiment_dir = "/".join(args.config.split("/")[:-1])
-    args.token = prep_token(args.token_path)
-    args.vocab_size = args.token.length
-    args.patience = args.patience_step // args.valid_step_range
-    args.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    return args
+from ..utils import set_seed
+from ..get_args import get_argument
 
 
 class Trainer():
@@ -52,7 +32,7 @@ class Trainer():
     ):
         self.args = args
         self.model = model.to(args.device)
-        self.train_data = prep_train_data(args,train_data,downstream=True)
+        self.train_data = train_data
         self.valid_data = prep_valid_data(args,valid_data,downstream=True)
         self.criteria = criteria
         self.criteria_mlp = criteria_mlp
@@ -94,12 +74,12 @@ class Trainer():
         }
         torch.save(ckpt,path)
 
-    def _train_batch(self,source,target,target_mlp,device):
+    def _train_batch(self,source,target,target_mlp):
         self.model.train()
         self.optimizer.zero_grad()
-        source = source.to(device)
-        target = target.to(device)
-        target_mlp = target_mlp.to(device)
+        source = source.to(self.device)
+        target = target.to(self.device)
+        target_mlp = target_mlp.to(self.device)
         out, out_mlp, _ = self.model(source,target[:-1,:])
         target_mlp = target_mlp.float()
         l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
@@ -111,12 +91,11 @@ class Trainer():
         self.scheduler.step()
         return los.item(), l.item(), loss_mlp.item()
     
-    def _valid_batch(self,source,target,target_mlp,device):
+    def _valid_batch(self,source,target,target_mlp):
         self.model.eval()
-        source = source.to(device)
-        target = target.to(device)
-        target_mlp = target_mlp.to(device)
-        target_mlp = target_mlp.float()
+        source = source.to(self.device)
+        target = target.to(self.device)
+        target_mlp = target_mlp.to(self.device).float()
         with torch.no_grad():
             out, out_mlp = self.model(source,target[:-1,:])
             l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
@@ -126,17 +105,17 @@ class Trainer():
         return los.item(), l.item(), loss_mlp.item()
 
     
-    def _train(self,train_data,log=True):
+    def _train(self,train_data):
         l1, l2 = [], []
         min_l2 = float("inf")
         end = False   
         for h, i, j in train_data:
             self.steps_run += 1
-            l_t , l_r, l_m = self._train_batch(h,i,j,self.device)
+            l_t , l_r, l_m = self._train_batch(h,i,j)
             if self.steps_run % self.valid_step_range == 0:
                 l_v = []
                 for v, w, y in self.valid_data:
-                    l_tv, l_rv, l_mv = self._valid_batch(v,w,y,self.device)
+                    l_tv, l_rv, l_mv = self._valid_batch(v,w,y)
                     l_v.append(l_tv)
                 l_v = np.mean(l_v)
                 l1.append(l_tv)
@@ -147,7 +126,7 @@ class Trainer():
                     self.best_model = self.model
                     min_l2 = l_v
                 self._save(self.ckpt_path,self.steps_run)
-                if log:
+                if self.args.loss_log == True:
                     print(f"step {self.steps_run} | train_loss: {l_t:.3f}, train_recon_loss:{l_r:.3f}, train_mlp_loss:{l_m:.3f}, valid_loss: {l_v:.3f}")
                 if end:
                     print(f"Early stopping at step {self.steps_run}")
@@ -157,17 +136,19 @@ class Trainer():
                 return l1, l2, end
         return l1, l2, end
     
-    def train(self,log):
+    def train(self):
         end = False
         self.l1, self.l2 = [], []
         while end == False:
-            a, b, end = self._train(self.train_data,log=log)
+            train_data = prep_train_data(self.args,train_data,downstream=True)
+            a, b, end = self._train(self.train_data)
             self.l1.extend(a)
             self.l2.extend(b)
-        return self.l1, self.l2
+            if self.args.train_one_cycle == True:
+                end = True
     
 def main():
-    args = get_args()
+    args = get_argument()
     set_seed(args.seed)
     print("loading data")
     train_data = pd.read_csv(args.train_data,index_col=0)
@@ -178,13 +159,9 @@ def main():
     trainer = Trainer(args,model,train_data,valid_data,criteria,criteria_mlp,optimizer,scheduler,es)
     if args.model_path is not None:
         trainer._load(args.model_path)
-    loss_t, loss_v = trainer.train(log=args.log)
+    trainer.train()
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
-    os.remove(trainer.ckpt_path)
-    """
-    if args.plot:
-        plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
-    """
+
 
 if __name__ == "__main__":
     ts = time.perf_counter()

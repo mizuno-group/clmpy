@@ -100,7 +100,7 @@ class Trainer():
                 l1.append(l_t)
                 l2.append(l_v)
                 end = self.es.step(l_v)
-                if len(l1) == 1 or l_v < min_l2:
+                if l_v < min_l2:
                     self.best_model = self.model
                     min_l2 = l_v
                 self._save(self.ckpt_path,self.steps_run)
@@ -122,7 +122,8 @@ class Trainer():
             a, b, end = self._train(train_data)
             self.l1.extend(a)
             self.l2.extend(b)
-        os.remove(self.ckpt_path)
+            if self.args.train_one_cycle == True:
+                end = True
     
 
 def main():

@@ -60,8 +60,8 @@ class Generator():
         # latent: [B, H]
         self.model.eval()
         if type(latent) == pd.DataFrame:
-            latent_arr = latent.values
-        latent = [torch.Tensor(latent_arr[i:i+self.args.batch_size,:]) for i in np.arange(0,len(latent),self.args.batch_size)]
+            latent = latent.values
+        latent = [torch.Tensor(latent[i:i+self.args.batch_size,:]) for i in np.arange(0,len(latent),self.args.batch_size)]
         res = []
         with torch.no_grad():
             for v in latent:
@@ -74,7 +74,7 @@ def main():
     args = get_argument()
     model = GRU(args)
     latent = pd.read_csv(args.latent_path,index_col=0)
-    generator = Generator(model,args)
+    generator = Generator(args,model)
     results = generator.generate(latent)
     output_path = os.path.join(args.experiment_dir,"generated.txt") if len(args.output_path) == 0 else args.output_path
     with open(output_path, "w") as f:

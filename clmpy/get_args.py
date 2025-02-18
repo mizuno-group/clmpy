@@ -47,6 +47,7 @@ def get_argument(notebook=False,config=""):
     parser.add_argument("--beta",type=float,default=1.0)
     parser.add_argument("--valid_step_range",type=int,default=500)
     parser.add_argument("--patience_step",type=int,default=10000)
+    parser.add_argument("--train_one_cycle",type=bool,default=False)
 
     # train downstream
     parser.add_argument("--mlp_dim",type=list,default=[128])

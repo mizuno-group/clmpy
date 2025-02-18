@@ -10,7 +10,7 @@ import pandas as pd
 import torch
 
 from .model import GRU
-from ..preprocess import prep_encode_data, prep_token
+from ..preprocess import prep_encode_data
 from ..get_args import get_argument
 
 def encode(args,smiles,model):       

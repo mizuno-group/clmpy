@@ -11,7 +11,6 @@ from transformers.modeling_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import *
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
@@ -207,7 +206,7 @@ class downstream_MLP(nn.Module):
         self.activation = nn.ReLU()
         layer_dim = config.layer_dim
         layer_dim.insert(self.latent_dim,0)
-        self.linear = nn.ModuleList([nn.Linear(layer_dim[i],layer_dim[i+1]) for i in range(len(layer_dim-1))])
+        self.linear = nn.ModuleList([nn.Linear(layer_dim[i],layer_dim[i+1]) for i in range(len(layer_dim)-1)])
         self.activation = nn.ReLU()
         self.classifier = nn.Linear(layer_dim[-1],1)
 

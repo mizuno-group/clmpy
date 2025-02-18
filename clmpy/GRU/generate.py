@@ -15,7 +15,7 @@ from ..get_args import get_argument
 
 
 class Generator():
-    def __init__(self,model,args):
+    def __init__(self,args,model):
         self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)
@@ -59,7 +59,8 @@ class Generator():
     def generate(self,latent):
         # latent: [B, H]
         self.model.eval()
-        latent_arr = latent.values
+        if type(latent) == pd.DataFrame:
+            latent_arr = latent.values
         latent = [torch.Tensor(latent_arr[i:i+self.args.batch_size,:]) for i in np.arange(0,len(latent),self.args.batch_size)]
         res = []
         with torch.no_grad():

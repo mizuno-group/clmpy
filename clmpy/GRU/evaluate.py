@@ -15,7 +15,7 @@ from ..get_args import get_argument
 
 
 class Evaluator():
-    def __init__(self,model,args):
+    def __init__(self,args,model):
         self.args = args
         self.id2sm = args.token.id2sm
         self.model = model.to(args.device)

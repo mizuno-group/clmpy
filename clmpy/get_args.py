@@ -4,11 +4,11 @@ import yaml
 
 from .preprocess import prep_token
 
-def get_argument(notebook=False):
+def get_argument(notebook=False,config=""):
     parser = ArgumentParser()
 
     # general
-    parser.add_argument("--config",type=FileType(mode="r"),default="")
+    parser.add_argument("--config",type=str,default="")
     parser.add_argument("--seed",type=int,default=123)
     parser.add_argument("--num_workers",type=int,default=1)
     parser.add_argument("--experiment_dir",type=str,default=os.getcwd())
@@ -68,15 +68,15 @@ def get_argument(notebook=False):
     parser.add_argument("--output_path",type=str,default="")
     
     if notebook == True:
-        args = parser.parse_args("")
+        args = parser.parse_args(["--config",config])
     else:
         args = parser.parse_args()
-    config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
-    arg_dict = args.__dict__
-    if config_dict != "":
+    if args.config != "":
+        with open(args.config,"r") as c:
+            config_dict = yaml.load(c,Loader=yaml.FullLoader)
+        arg_dict = args.__dict__
         for key, value in config_dict.items():
             arg_dict[key] = value
-        args.config = args.config.name
 
     args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length

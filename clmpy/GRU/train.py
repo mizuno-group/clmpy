@@ -122,6 +122,7 @@ class Trainer():
             a, b, end = self._train(train_data)
             self.l1.extend(a)
             self.l2.extend(b)
+        os.remove(self.ckpt_path)
     
 
 def main():
@@ -136,7 +137,6 @@ def main():
     trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
     trainer.train()
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
-    os.remove(trainer.ckpt_path)
     #if args.plot:
     #   plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
 

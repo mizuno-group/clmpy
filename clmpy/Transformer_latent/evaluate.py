@@ -18,11 +18,13 @@ def get_args():
     parser.add_argument("--model_path",type=str,default="best_model.pt")
     parser.add_argument("--test_path",type=str,default="data/val_10k.csv")
     args = parser.parse_args()
-    args.config = args.config.name
+    
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__
     for key, value in config_dict.items():
         arg_dict[key] = value
+    args.config = args.config.name
+    args.experiment_dir = "/".join(args.model_path.split("/")[:-1])
     args.token = prep_token(args.token_path)
     args.vocab_size = args.token.length
     args.patience = args.patience_step // args.valid_step_range
@@ -40,7 +42,7 @@ class Evaluator():
             self._load(args.model_path)
 
     def _load(self,path):
-        self.model.load_state_dict(torch.load(path))
+        self.model.load_state_dict(torch.load(path), strict=False)
 
     def _eval_batch(self,source,target,device):
         source = source.to(device)
@@ -88,6 +90,7 @@ class Evaluator():
 def main():
     args = get_args()
     test_data = pd.read_csv(args.test_path,index_col=0)
+    test_data = test_data[test_data["Class"] == "test"]
     model = TransformerLatent(args)
     evaluator = Evaluator(model,args)
     results, accuracy = evaluator.evaluate(test_data)

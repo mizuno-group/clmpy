@@ -10,15 +10,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from sklearn.metrics import roc_auc_score, mean_squared_error, r2_score
-from .model import TransformerLatent_MLP
+
+from ..Transformer_latent.model import TransformerVAE_MLP, KLLoss
 from ..preprocess import *
 from ..utils import plot_loss
-
-import warnings
-
-warnings.simplefilter("ignore", FutureWarning)
-warnings.simplefilter("ignore", UserWarning)
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -57,7 +52,7 @@ class Trainer():
     ):
         self.args = args
         self.model = model.to(args.device)
-        self.train_data = train_data
+        self.train_data = prep_train_data(args,train_data,downstream=True)
         self.valid_data = prep_valid_data(args,valid_data,downstream=True)
         self.criteria = criteria
         self.criteria_mlp = criteria_mlp
@@ -73,7 +68,6 @@ class Trainer():
         self.gamma = args.gamma
         self.total_step = args.steps
         self.valid_step_range = args.valid_step_range
-        self.task = args.task
 
     def _load_ckpt(self,path):
         ckpt = torch.load(path)
@@ -105,24 +99,17 @@ class Trainer():
         source = source.to(device)
         target = target.to(device)
         target_mlp = target_mlp.to(device)
-        out, out_mlp, _ = self.model(source,target[:-1,:])
-
-
+        out, out_mlp, mu, log_var = self.model(source,target[:-1,:])
         target_mlp = target_mlp.float()
         l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        l2 = KLLoss(mu,log_var) / source.shape[1]
         loss_mlp  = self.criteria_mlp(out_mlp,target_mlp.view(-1, 1))
-        los = l + self.gamma * loss_mlp
+        los = (l + l2 * self.beta) + self.gamma * loss_mlp
         assert (not np.isnan(l.item()))
-
-        try:
-            loss_mlp.backward()
-        except Exception as e:
-            print(f"Error in backward pass: {e}")
-
+        los.backward()
         self.optimizer.step()
         self.scheduler.step()
-
-        return los.item(), l.item(), loss_mlp.item()
+        return l.item(), l2.item(), loss_mlp.item()
     
     def _valid_batch(self,source,target,target_mlp,device):
         self.model.eval()
@@ -130,127 +117,78 @@ class Trainer():
         target = target.to(device)
         target_mlp = target_mlp.to(device)
         target_mlp = target_mlp.float()
-        
         with torch.no_grad():
-            out, out_mlp, _ = self.model(source,target[:-1,:])
+            out, out_mlp, mu, log_var = self.model(source,target[:-1,:])
             l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
             loss_mlp  = self.criteria_mlp(out_mlp, target_mlp.view(-1, 1))
-
-            los = l + self.gamma * loss_mlp
-
-        d_rounded = torch.round(torch.sigmoid(out_mlp)).long()
-        judge = torch.eq(target_mlp, d_rounded).squeeze(1)  
-        row = []
-        t_list = target_mlp.tolist()  # 事前にリスト化
-        r_list = d_rounded.tolist()
-        d_list = torch.sigmoid(out_mlp).tolist()
-
-        for t, r, d in zip(t_list, r_list, d_list):
-            row.append([d[0], r[0], t])  
-
-        return los.item(), l.item(), loss_mlp.item(), row
+            l2 = KLLoss(mu,log_var) / source.shape[1]
+        return l.item(), l2.item(), loss_mlp.item()
 
     
     def _train(self,train_data,log=True):
-        l1, l2 = [], []
+        lt, lv, lt2, lv2 , lm, lmv = [], [], [], [], [], []
         min_l2 = float("inf")
         end = False   
         for h, i, j in train_data:
             self.steps_run += 1
-            l_t , l_r, l_m = self._train_batch(h,i,j,self.device)
+            l_t , l_t2, l_m = self._train_batch(h,i,j,self.device)
             if self.steps_run % self.valid_step_range == 0:
-                l_v = []
-                res = []
+                l = []
                 for v, w, y in self.valid_data:
-                    l_tv, l_rv, l_mv, row = self._valid_batch(v,w,y,self.device)
-                    res.extend(row)
-                    l_v.append(l_tv)
-                l_v = np.mean(l_v)
-                l1.append(l_tv)
-                l2.append(l_v)
-                
-                
-                pred_df = pd.DataFrame(res,columns=["predict","round","answer"])
-                if self.task == "regression":
-                    mse = mean_squared_error(pred_df["answer"], pred_df["predict"])
-                    r2 = r2_score(pred_df["answer"], pred_df["predict"])
-                    
-                    end = self.es.step(mse)  # MSE が小さいほど良いので、そのまま early stopping に使用
-
-                    if len(l1) == 1 or l_v < min_l2:
-                        self.best_model = self.model
-                        min_l2 = l_v
-
-                    self._save(self.ckpt_path, self.steps_run)
-
-                    if log:
-                        print(f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, MSE: {mse:.3f}, R²: {r2:.3f}")
-
-                    if end:
-                        print(f"Early stopping at step {self.steps_run}")
-
-                else:  # 分類タスク (args.task == "classification")
-                    TP = len(pred_df.query("round == True and answer == True"))
-                    TN = len(pred_df.query("round == False and answer == False"))
-                    FP = len(pred_df.query("round == True and answer == False"))
-                    FN = len(pred_df.query("round == False and answer == True"))
-                    
-                    auroc = roc_auc_score(pred_df["answer"], pred_df["predict"])
-                    accuracy = (TP + TN) / len(pred_df) if len(pred_df) > 0 else 0
-                    precision = TP / (TP + FP) if (TP + FP) > 0 else 0
-                    recall = TP / (TP + FN) if (TP + FN) > 0 else 0
-
-                    end = self.es.step(auroc)  # 分類では accuracy で early stopping
-
-                    if len(l1) == 1 or l_v < min_l2:
-                        self.best_model = self.model
-                        min_l2 = l_v
-
-                    self._save(self.ckpt_path, self.steps_run)
-
-                    if log:
-                        print(f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, AUROC: {auroc:.3f}, Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall (Sensitivity): {recall:.4f}")
-
-                    if end:
-                        print(f"Early stopping at step {self.steps_run}")
+                    l_v, l_v2, l_mv = self._valid_batch(v,w,y,self.device)
+                    l.append(l_v + l_v2 * self.beta)
+                l = np.mean(l_v)
+                lt.append(l_t)
+                lv.append(l_v)
+                lm.append(l_m)
+                lt2.append(l_t2)
+                lv2.append(l_v2)
+                lmv.append(l_mv)
+                end = self.es.step(l_v)
+                if len(l) == 1 or l_v < min_l2:
+                    self.best_model = self.model
+                    min_l2 = l_v
+                self._save(self.ckpt_path,self.steps_run)
+                if log:
+                    print(f"step {self.steps_run} | train_loss: {(l_t + l_t2 * self.beta)+ l_m * self.gamma :.3f}, train_recon_loss:{l_t + l_t2 * self.beta:.3f}, train_mlp_loss:{l_m:.3f}, valid_loss: {l_v + l_v2 * self.beta:.3f}")
+                if end:
+                    print(f"Early stopping at step {self.steps_run}")
+                    return lt, lv, lt2, lv2, end
             if self.steps_run >= self.total_step:
                 end = True
-                return l1, l2, end
-        return l1, l2, end
+                return lt, lv, lt2, lv2, end
+        return lt, lv, lt2, lv2, end
     
-    def train(self,args):
+    def train(self,log):
         end = False
-        self.l1, self.l2 = [], []
+        lt, lv, lt2, lv2 = [], [], [], []
         while end == False:
-            train_data = prep_train_data(args,self.train_data, downstream=True)
-            a, b, end = self._train(train_data,log=True)
-            self.l1.extend(a)
-            self.l2.extend(b)
-        return self.l1, self.l2
+            l_t, l_v, l_t2, l_v2, end = self._train(self.train_data,log=log)
+            lt.extend(l_t)
+            lv.extend(l_v)
+            lt2.extend(l_t2)
+            lv2.extend(l_v2)
+        return lt, lv, lt2, lv2
     
 def main():
     args = get_args()
     set_seed(args.seed)
     print("loading data")
     train_data = pd.read_csv(args.train_data,index_col=0)
-    train_data = train_data[train_data["Class"]=="train"]
     valid_data = pd.read_csv(args.valid_data,index_col=0)
-    valid_data = valid_data[valid_data["Class"]=="valid"]
-    model = TransformerLatent_MLP(args)
-    criteria, criteria_mlp, optimizer, scheduler, es = load_train_objs_mlp(args,model,mode="max")
+    model = TransformerVAE_MLP(args)
+    criteria, criteria_mlp, optimizer, scheduler, es = load_train_objs_mlp(args,model)
     print("train start")
     trainer = Trainer(args,model,train_data,valid_data,criteria,criteria_mlp,optimizer,scheduler,es)
     if args.model_path is not None:
         trainer._load(args.model_path)
-    loss_t, loss_v = trainer.train(args)
-    if not os.path.exists(args.save_dir): # ディレクトリが存在するか確認
-        os.makedirs(args.save_dir)
-    torch.save(trainer.best_model.state_dict(),os.path.join(args.save_dir,"best_model.pt"))
+    loss_t, loss_v, loss_t2, loss_v2 = trainer.train(log=args.log)
+    torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
     os.remove(trainer.ckpt_path)
-
+    """
     if args.plot:
-        plot_loss(loss_t,loss_v,dir_name=args.save_dir)
-
+        plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
+    """
 
 if __name__ == "__main__":
     ts = time.perf_counter()

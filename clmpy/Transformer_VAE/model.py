@@ -215,4 +215,37 @@ class TransformerVAE(nn.Module):
         out = self.decoder(tgt,z,layer_past=past)
         return out, mu, log_var
 
+class downstream_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.latent_dim = config.latent_dim
+        self.activation = nn.ReLU()
+        layer_dim = config.layer_dim
+        layer_dim.insert(self.latent_dim,0)
+        self.linear = nn.ModuleList([nn.Linear(layer_dim[i],layer_dim[i+1]) for i in range(len(layer_dim-1))])
+        self.activation = nn.ReLU()
+        self.classifier = nn.Linear(layer_dim[-1],1)
 
+    def forward(self,x):
+        for v in self.linear:
+            x = v(x)
+            x = self.activation(x)
+        x = self.classifier(x)
+        return x
+    
+class TransformerVAE_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.encoder = Encoder(config)
+        self.sampling = Sampling()
+        self.decoder = Decoder(config)
+        self.mlp = downstream_MLP(config)
+
+    def forward(self,src,tgt,past=None):
+        mu, log_var = self.encoder(src)
+        z = self.sampling(mu,log_var)
+        out = self.decoder(tgt,z,layer_past=past)
+        out_d = self.mlp(mu)
+        return out, out_d, mu, log_var

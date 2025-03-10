@@ -8,7 +8,10 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, Sampler
 from torch.nn.utils.rnn import pad_sequence
+from rdkit import Chem
+from rdkit.Chem import AllChem
 
+from mordred import Calculator, descriptors
 
 class BucketSampler(Sampler):
     def __init__(self,dataset,buckets=(20,150,10),shuffle=True,batch_size=512,drop_last=False):
@@ -141,7 +144,8 @@ class CLM_Dataset_MLP(Dataset):
         self.tokens = token
         self.input = seq2id(x,self.tokens,sfl)
         self.output = seq2id(y,self.tokens,sfl)
-        self.output_y = torch.tensor(binary, dtype=torch.long)  # torch.Tensorに変換
+        self.output_y = torch.tensor(binary.iloc[:], dtype=torch.float)
+
         self.datanum = len(x)
 
     def __len__(self):
@@ -153,7 +157,63 @@ class CLM_Dataset_MLP(Dataset):
         bin = self.output_y[idx]  # 修正: iloc を削除
         
         return out_i, out_o, bin
-    
+
+
+class SimpleDataset(Dataset):
+    def __init__(self, inputs, labels):
+        self.inputs = np.array(inputs, dtype=np.float32)  # 直接配列を受け取る
+        self.labels = np.array(labels, dtype=np.float32)  # ラベルもNumPyに変換
+
+    def __len__(self):
+        return len(self.labels)
+
+    def __getitem__(self, idx):
+        x = torch.tensor(self.inputs[idx], dtype=torch.float32)  
+        y = torch.tensor(self.labels[idx], dtype=torch.float32)  # ラベル
+        return x, y
+
+
+class CLM_Dataset_ECFP(Dataset):
+    def __init__(self,x,y,binary,token,sfl):
+        self.tokens = token
+        self.input = torch.tensor(np.array(x.apply(smiles_to_mordred_fp).tolist()), dtype=torch.float32) 
+        self.output = torch.tensor(np.array(x.apply(smiles_to_mordred_fp).tolist()), dtype=torch.float32)
+        self.output_y = torch.tensor(binary.iloc[:], dtype=torch.float)
+
+        self.datanum = len(x)
+    def __len__(self):
+        return self.datanum
+
+    def __getitem__(self, idx):
+        out_i = self.input[idx]
+        out_o = self.output[idx]
+        bin = self.output_y[idx]  # 修正: iloc を削除
+        
+        return out_i, out_o, bin
+
+def smiles_to_ecfp4(smiles, radius=2, n_bits=1024):
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return np.zeros(n_bits)  # 無効なSMILESにはゼロベクトルを割り当て
+    return np.array(AllChem.GetMorganFingerprintAsBitVect(mol, radius, nBits=n_bits))
+
+def smiles_to_mordred_fp(smiles):
+    calc = Calculator(descriptors, ignore_3D=False)
+
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return np.zeros(len(calc.descriptors))  # 無効なSMILESにはゼロベクトルを返す
+
+    # Mordredで記述子を計算
+    desc = calc(mol)
+
+    # 結果を辞書形式に変換 → numpy 配列に変換
+    desc_values = np.array(list(desc.asdict().values()), dtype=np.float32)
+    # NaN（計算できなかった値）をゼロに置き換える
+    desc_values = np.nan_to_num(desc_values)
+
+    return desc_values
+   
 class Encoder_Dataset(Dataset):
     def __init__(self,x,token,sfl):
         self.tokens = token
@@ -192,4 +252,17 @@ def collate_MLP(batch):
     xs = pad_sequence(xs,batch_first=False,padding_value=0)
     ys = pad_sequence(ys,batch_first=False,padding_value=0)
     bins = torch.tensor(bins)
+    return xs, ys, bins
+
+def collate_ECFP(batch):
+    xs, ys, bins = [], [], []
+    for x, y, bin in batch:
+        xs.append(torch.FloatTensor(x))  # Long → Float に変更
+        ys.append(torch.FloatTensor(y))  # Long → Float に変更
+        bins.append(bin)  # ラベルは整数なので Long のままでOK
+
+    xs = pad_sequence(xs, batch_first=True , padding_value=0)
+    ys = pad_sequence(ys, batch_first=True , padding_value=0)
+    bins = torch.tensor(bins, dtype=torch.long)  # ラベルは long でOK
+
     return xs, ys, bins

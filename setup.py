@@ -16,6 +16,7 @@ setup(
             "clmpy.gru.generate=clmpy.GRU.generate:main",
             "clmpy.gru.encode=clmpy.GRU.encode:main",
             "clmpy.transformerlatent.train=clmpy.Transformer_latent.train:main",
+            "clmpy.transformerlatent.train_mlp=clmpy.Transformer_latent.train_MLP:main",
             "clmpy.transformerlatent.evaluate=clmpy.Transformer_latent.evaluate:main",
             "clmpy.transformerlatent.generate=clmpy.Transformer_latent.generate:main",
             "clmpy.transformerlatent.encode=clmpy.Transformer_latent.encode:main",

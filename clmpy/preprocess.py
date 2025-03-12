@@ -64,6 +64,3 @@ def prep_encode_data(args,smiles):
 def prep_token(token_path):
     tokens = tokens_table(token_path)
     return tokens
-
-def KLLoss(mu,log_var):
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / mu.shape[0]

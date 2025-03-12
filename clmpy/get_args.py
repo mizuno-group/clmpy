@@ -49,11 +49,6 @@ def get_argument(notebook=False,config=""):
     parser.add_argument("--patience_step",type=int,default=10000)
     parser.add_argument("--train_one_cycle",type=bool,default=False)
 
-    # train downstream
-    parser.add_argument("--mlp_dim",type=list,default=[128])
-    parser.add_argument("--gamma",type=float,default=1.0)
-    parser.add_argument("--task",type=str,choices=["classification","regression"])
-
     # evaluation
     parser.add_argument("--test_path",type=str,default="")
     parser.add_argument("--model_path",type=str,default="")

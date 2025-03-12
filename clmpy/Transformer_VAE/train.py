@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 from .model import TransformerVAE
 from ..preprocess import *
+from ..model_helper import KLLoss, LossContainer
 from ..utils import set_seed
 from ..get_args import get_argument
 
@@ -38,6 +39,7 @@ class Trainer():
         self.es = es
         self.beta = args.beta
         self.steps_run = 0
+        self.loss = LossContainer()
         self.ckpt_path = os.path.join(args.experiment_dir,"checkpoint.pt")
         if os.path.exists(self.ckpt_path):
             self._load(self.ckpt_path)
@@ -88,7 +90,6 @@ class Trainer():
         return l.item(), l2.item()
     
     def _train(self,args,train_data):
-        lt, lv, lt2, lv2 = [], [], [], []
         min_l = float("inf")
         end = False
         for datas in train_data:
@@ -100,10 +101,10 @@ class Trainer():
                     l_v, l_v2 = self._valid_batch(v,w)
                     l.append(l_v + l_v2 * self.beta)
                 l = np.mean(l)
-                lt.append(l_t)
-                lv.append(l_v)
-                lt2.append(l_t2)
-                lv2.append(l_v2)
+                self.loss.train_add("reconstruction",l_t)
+                self.loss.valid_add("reconstruction",l_v)
+                self.loss.train_add("KL",l_t2)
+                self.loss.valid_add("KL",l_v2)
                 end = self.es.step(l)
                 if l < min_l:
                     self.best_model = self.model
@@ -113,11 +114,11 @@ class Trainer():
                     print(f"step {self.steps_run} | train_loss: {l_t + l_t2 * self.beta}, valid_loss: {l}")
                 if end:
                     print(f"Early stopping at step {self.steps_run}")
-                    return lt, lv, lt2, lv2, end
-            if self.steps_run >= args.steps:
+                    return end
+            if self.steps_run >= self.args.steps:
                 end = True
-                return lt, lv, lt2, lv2, end
-        return lt, lv, lt2, lv2, end
+                return end
+        return end
     
     def train(self,args):
         end = False

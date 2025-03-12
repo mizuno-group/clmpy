@@ -13,6 +13,7 @@ from torch.utils.data import DataLoader
 
 from .model import TransformerLatent
 from ..preprocess import *
+from ..model_helper import LossContainer
 from ..utils import set_seed
 from ..get_args import get_argument
 
@@ -86,7 +87,6 @@ class Trainer():
         return l.item()
     
     def _train(self,train_data):
-        l, l2 = [], []
         min_l2 = float("inf")
         end = False
         for datas in train_data:
@@ -97,8 +97,8 @@ class Trainer():
                 for v, w in self.valid_data:
                     l_v.append(self._valid_batch(v,w))
                 l_v = np.mean(l_v)
-                l.append(l_t)
-                l2.append(l_v)
+                self.loss.train_add("reconstruction",l_t)
+                self.loss.valid_add("reconstruction",l_v)
                 end = self.es.step(l_v)
                 if l_v < min_l2:
                     self.best_model = self.model
@@ -108,20 +108,17 @@ class Trainer():
                     print(f"step {self.steps_run} | train_loss: {l_t}, valid_loss: {l_v}")
                 if end:
                     print(f"Early stopping at step {self.steps_run}")
-                    return l, l2, end
+                    return end
             if self.steps_run >= self.args.steps:
                 end = True
-                return l, l2, end
-        return l, l2, end
+                return end
+        return end
     
     def train(self):
         end = False
-        self.l1, self.l2 = [], []
         while end == False:
             train_data = prep_train_data(self.args,self.train_data)
-            a, b, end = self._train(train_data)
-            self.l1.extend(a)
-            self.l2.extend(b)
+            end = self._train(train_data)
             if self.args.train_one_cycle == True:
                 end = True
     

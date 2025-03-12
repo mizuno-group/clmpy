@@ -17,6 +17,7 @@ class BucketSampler(Sampler):
         self.batch_size = batch_size
         self.drop_last = drop_last
         length = [len(v[0]) for v in dataset]
+
         bucket_range = np.arange(*buckets)
         
         assert isinstance(buckets,tuple)
@@ -25,11 +26,10 @@ class BucketSampler(Sampler):
         buc = torch.bucketize(torch.tensor(length),torch.tensor(bucket_range),right=False)
 
         bucs = defaultdict(list)
-        bucket_max = max(np.array(buc))
         for i,v in enumerate(buc):
             bucs[v.item()].append(i)
-        _ = bucs.pop(bucket_max)
         
+        # remove empty bucket
         self.buckets = dict()
         for bucket_size, bucket in bucs.items():
             if len(bucket) > 0:
@@ -37,6 +37,7 @@ class BucketSampler(Sampler):
         self.__iter__()
 
     def __iter__(self):
+        # permutation in each bucket
         for bucket_size in self.buckets.keys():
             self.buckets[bucket_size] = self.buckets[bucket_size][torch.randperm(self.buckets[bucket_size].nelement())]
 
@@ -49,13 +50,15 @@ class BucketSampler(Sampler):
             batches += curr_bucket
 
         self.length = len(batches)
+        # permutation of all batches
         if self.shuffle == True:
             random.shuffle(batches)
         return iter(batches)
 
     def __len__(self):
         return self.length
-    
+
+
 def tokenize(smiles,token_list):
     tokenized = []
     for s in smiles:
@@ -133,6 +136,24 @@ class CLM_Dataset(Dataset):
         out_o = self.output[idx]
         return out_i, out_o
     
+class CLM_Dataset_MLP(Dataset):
+    def __init__(self,x,y,target,token,sfl):
+        self.tokens = token
+        self.input = seq2id(x,self.tokens,sfl)
+        self.output = seq2id(y,self.tokens,sfl)
+        self.output_d = torch.tensor(target, dtype=torch.long)  # torch.Tensorに変換
+        self.datanum = len(x)
+
+    def __len__(self):
+        return self.datanum
+
+    def __getitem__(self, idx):
+        out_i = self.input[idx]
+        out_o = self.output[idx]
+        bin = self.output_d[idx]
+        
+        return out_i, out_o, bin
+    
 class Encoder_Dataset(Dataset):
     def __init__(self,x,token,sfl):
         self.tokens = token
@@ -161,3 +182,14 @@ def encoder_collate(batch):
         xs.append(torch.LongTensor(x))
     xs = pad_sequence(xs,batch_first=False,padding_value=0)
     return xs
+
+def collate_MLP(batch):
+    xs, ys, targets = [], [], []
+    for x,y,tgt in batch:
+        xs.append(torch.LongTensor(x))
+        ys.append(torch.LongTensor(y))
+        targets.append(tgt)
+    xs = pad_sequence(xs,batch_first=False,padding_value=0)
+    ys = pad_sequence(ys,batch_first=False,padding_value=0)
+    targets = torch.tensor(targets)
+    return xs, ys, targets

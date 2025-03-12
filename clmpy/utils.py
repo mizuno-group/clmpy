@@ -3,10 +3,9 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import math
+import torch
 
-from .data_handler import seq2id
-
-
+"""
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
     fig = plt.figure(figsize=(12,7))
     ax1 = fig.add_subplot(211)
@@ -39,7 +38,7 @@ def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
         h4, l4 = ax4.get_legend_handles_labels()
         ax2.legend(h2+h4,l2+l4)
     plt.savefig(os.path.join(dir_name,"loss.png"),bbox_inches="tight")
-
+"""
 
 def generate_uniform_random(dim,n,low=-1,high=1):
     # dim: int, dimension of latent vector
@@ -124,35 +123,6 @@ def warmup_schedule(warmup):
     return f
 
 
-class attrdict(dict):
-    def __init__(self,*args,**kwargs):
-        dict.__init__(self,*args,**kwargs)
-        self.__dict__ = self
-
-
-def chiral_count(df):
-    chiral_count = 0
-    chiral_right = 0
-    chiral_wrong = 0
-    right = 0
-    wrong = 0
-    for a, p in zip(df["answer"],df["predict"]):
-        ans = chiral_check(a)
-        if a == p:
-            right += 1
-            if len(ans) > 0:
-                chiral_right += 1
-                chiral_count += 1
-        else:
-            wrong += 1
-            if len(ans) > 0:
-                chiral_wrong += 1
-                chiral_count += 1
-    return chiral_count, chiral_right, right, chiral_wrong, wrong
-
-
-
-
 class Evaluation():
     def __init__(self,df):
         self.input = df["input"]
@@ -163,7 +133,7 @@ class Evaluation():
     def perfect_accuracy(self):
         return len(self.judge[self.judge == True]) / len(self.judge)
     
-    def partial_accuracy_character(self):
+    def partial_accuracy(self):
         acc = []
         for v,w in zip(self.output,self.predict):
             c = 0
@@ -173,20 +143,6 @@ class Evaluation():
             acc.append(c / max(len(v),len(w)))
         mean = np.mean(acc)
         return acc, mean
-
-    def partial_accuracy_token(self,token,sfl=True):
-        acc = []
-        onehot_out = seq2id(self.output,token,sfl)
-        onehot_pred = seq2id(self.predict,token,sfl)
-        for v,w in zip(onehot_out,onehot_pred):
-            c = 0
-            for i, j in zip(v,w):
-                if i == j:
-                    c += 1
-            acc.append(c / max(len(v),len(w)))
-        mean = np.mean(acc)
-        return acc, mean
-
     
     def __chiral_check(smiles):
         tok = []
@@ -217,3 +173,6 @@ class Evaluation():
                     wn += 1
         return cc, rc, wc, rn, wn
 
+def set_seed(seed):
+    torch.manual_seed(seed)
+    np.random.seed(seed)

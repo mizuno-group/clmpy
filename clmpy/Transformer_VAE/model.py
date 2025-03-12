@@ -11,10 +11,6 @@ from transformers.modeling_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention, GPT2MLP
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-def KLLoss(mu,log_var):
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel())
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=300):
@@ -152,11 +148,12 @@ class Encoder(nn.Module):
     
 
 class Sampling(nn.Module):
-    def __init__(self):
+    def __init__(self,config):
         super().__init__()
+        self.device = config.device
     
     def forward(self,mu,log_var):
-        epsilon = torch.randn(*mu.shape).to(DEVICE)
+        epsilon = torch.randn(*mu.shape).to(self.device)
         return mu + torch.sqrt(torch.exp(log_var)) * epsilon
     
 

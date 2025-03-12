@@ -6,10 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-def KLLoss(mu,log_var):
-    return 0.5 * (torch.sum(mu**2) + torch.sum(torch.exp(log_var)) - torch.sum(log_var) - log_var.numel()) / mu.shape[0]
 
 class GRU_Layer(nn.Module):
     def __init__(self,embedding_dim,layer):
@@ -70,11 +66,12 @@ class Encoder(nn.Module):
     
 
 class Sampling(nn.Module):
-    def __init__(self):
+    def __init__(self,device):
         super().__init__()
+        self.device = device
 
     def forward(self,mu,log_var):
-        epsilon = torch.randn(*mu.shape).to(DEVICE)
+        epsilon = torch.randn(*mu.shape).to(self.device)
         return mu + torch.sqrt(torch.exp(log_var)) * epsilon
     
 
@@ -117,7 +114,7 @@ class GRUVAE(nn.Module):
     def __init__(self,config):
         super().__init__()
         self.encoder = Encoder(config)
-        self.sampling = Sampling()
+        self.sampling = Sampling(config.device)
         self.decoder = Decoder(config)
     
     def forward(self,x,y):

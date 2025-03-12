@@ -11,7 +11,6 @@ from transformers.modeling_utils import Conv1D
 from transformers.models.gpt2.modeling_gpt2 import *
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
-DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
@@ -199,4 +198,36 @@ class TransformerLatent(nn.Module):
         return outputs, latent
     
 
+class downstream_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.latent_dim = config.latent_dim
+        self.activation = nn.ReLU()
+        layer_dim = config.layer_dim
+        layer_dim.insert(self.latent_dim,0)
+        self.linear = nn.ModuleList([nn.Linear(layer_dim[i],layer_dim[i+1]) for i in range(len(layer_dim)-1)])
+        self.activation = nn.ReLU()
+        self.classifier = nn.Linear(layer_dim[-1],1)
 
+    def forward(self,x):
+        for v in self.linear:
+            x = v(x)
+            x = self.activation(x)
+        x = self.classifier(x)
+        return x
+    
+
+class TransformerLatent_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.config = config
+        self.encoder = Encoder(config)
+        self.decoder = Decoder(config)
+        self.mlp = downstream_MLP(config)
+
+    def forward(self,src,tgt,past=None):
+        latent = self.encoder(src)
+        out = self.decoder(tgt,latent,layer_past=past)
+        out_d = self.mlp(latent)
+        return out, out_d, latent

@@ -100,7 +100,6 @@ class Trainer():
             out, out_mlp = self.model(source,target[:-1,:])
             l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
             loss_mlp  = self.criteria_mlp(out_mlp, target_mlp.view(-1, 1))
-
             los = l + self.gamma * loss_mlp
         return los.item(), l.item(), loss_mlp.item()
 

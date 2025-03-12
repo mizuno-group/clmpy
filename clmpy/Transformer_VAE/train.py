@@ -122,16 +122,11 @@ class Trainer():
     
     def train(self,args):
         end = False
-        self.lt, self.lv, self.lt2, self.lv2 = [], [], [], []
         while end == False:
             train_data = prep_train_data(args,self.train_data)
-            l_t, l_v, l_t2, l_v2, end = self._train(args,train_data)
-            self.lt.extend(l_t)
-            self.lv.extend(l_v)
-            self.lt2.extend(l_t2)
-            self.lv2.extend(l_v2)
+            end = self._train(args,train_data)
             if self.args.train_one_cycle == True:
-                end = True
+                end == True
         
 
 def main():

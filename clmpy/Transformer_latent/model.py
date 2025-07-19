@@ -222,22 +222,22 @@ class downstream_MLP(nn.Module):
             nn.Linear(layer_dim[i], layer_dim[i+1]) for i in range(len(layer_dim)-1)
         ])
 
-        # # Batch Normalization 層 (フラグが True の場合のみ)
-        # if self.use_batch_norm:
-        #     self.batch_norm = nn.ModuleList([
-        #         nn.BatchNorm1d(layer_dim[i+1]) for i in range(len(layer_dim)-1)
-        #     ])
-        # else:
-        #     self.batch_norm = None
+        # Batch Normalization 層 (フラグが True の場合のみ)
+        if self.use_batch_norm:
+            self.batch_norm = nn.ModuleList([
+                nn.BatchNorm1d(layer_dim[i+1]) for i in range(len(layer_dim)-1)
+            ])
+        else:
+            self.batch_norm = None
 
-        # # Layer Normalization 層 (フラグが True の場合のみ)
+        # Layer Normalization 層 (フラグが True の場合のみ)
 
-        # if self.use_layer_norm:
-        #     self.layer_norm = nn.ModuleList([
-        #         nn.LayerNorm(layer_dim[i+1]) for i in range(len(layer_dim)-1)
-        #     ])
-        # else:
-        #     self.layer_norm = None
+        if self.use_layer_norm:
+            self.layer_norm = nn.ModuleList([
+                nn.LayerNorm(layer_dim[i+1]) for i in range(len(layer_dim)-1)
+            ])
+        else:
+            self.layer_norm = None
 
 
         # Dropout 層 (0 以上の値が設定されている場合のみ)

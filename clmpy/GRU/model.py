@@ -111,3 +111,64 @@ class GRU(nn.Module):
         latent = self.encoder(x)
         out, hidden = self.decoder(y,latent)
         return out, latent
+
+import torch
+import torch.nn as nn
+
+class downstream_MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.latent_dim = config.latent_dim
+        self.activation = nn.ReLU()
+        self.dropout_rate = config.dropout
+        self.use_batch_norm = config.batch_norm
+
+        layer_dim = config.layer_dim
+        layer_dim.insert(0, self.latent_dim)
+
+        self.linear = nn.ModuleList([
+            nn.Linear(layer_dim[i], layer_dim[i+1]) for i in range(len(layer_dim)-1)
+        ])
+
+        if self.use_batch_norm:
+            self.batch_norm = nn.ModuleList([
+                nn.BatchNorm1d(layer_dim[i+1]) for i in range(len(layer_dim)-1)
+            ])
+        else:
+            self.batch_norm = None
+
+        if self.dropout_rate > 0:
+            self.dropout = nn.ModuleList([
+                nn.Dropout(self.dropout_rate) for _ in range(len(layer_dim)-1)
+            ])
+        else:
+            self.dropout = None  # Dropout を適用しない場合は None
+
+        self.classifier = nn.Linear(layer_dim[-1], 1)
+
+    def forward(self, x):
+        for i, v in enumerate(self.linear):
+            x = v(x)
+            if self.batch_norm and x.shape[0] > 1:  # バッチサイズが 1 のときは BatchNorm をスキップ
+                x = self.batch_norm[i](x)
+            x = self.activation(x)  # 活性化関数
+            if self.dropout:  # Dropout が有効なら適用
+                x = self.dropout[i](x)
+        x = self.classifier(x)
+        return x
+
+
+class GRU_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.encoder = Encoder(config)
+        self.decoder = Decoder(config)
+        self.mlp = downstream_MLP(config)
+
+
+    def forward(self,x,y):
+        latent = self.encoder(x)
+        out, hidden = self.decoder(y,latent)
+        out_d = self.mlp(latent)
+        return out, out_d, latent

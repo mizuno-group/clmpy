@@ -13,13 +13,14 @@ from .model import TransformerLatent_MLP
 from ..preprocess import *
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import logging
 
 def get_args():
     parser = ArgumentParser()
     parser.add_argument("--config",type=FileType(mode="r"),default="config.yml")
     parser.add_argument("--model_path",type=str,default="best_model.pt")
     parser.add_argument("--test_path",type=str,default="data/val_10k.csv")
+    parser.add_argument("--save_dir",type=str, default=None) 
     args = parser.parse_args()
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__
@@ -72,7 +73,14 @@ class Evaluator_MLP():
             for source, target, y in test_data:
                 res.extend(self._eval_batch(source,y,self.args.device))
         pred_df = pd.DataFrame(res,columns=["input","predict","round","answer","judge"])
-        
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s | %(levelname)s | %(message)s',
+            handlers=[
+                logging.FileHandler(self.args.save_dir+"/evaluate.log", mode='a'),  # ログファイルに追記
+                logging.StreamHandler()                         # コンソールにも出力
+            ]
+        )
         if self.task == "regression":
             mae = mean_absolute_error(pred_df["answer"], pred_df["predict"])
             mse = mean_squared_error(pred_df["answer"], pred_df["predict"])
@@ -84,21 +92,33 @@ class Evaluator_MLP():
             print(f"RMSE (Root Mean Squared Error): {rmse:.4f}")
             print(f"R² Score: {r2:.4f}")
 
+            # logging でも出力
+            logging.info(
+                f"MAE (Mean Absolute Error): {mae:.4f}\n"
+                f"MSE (Mean Squared Error): {mse:.4f}\n"
+                f"RMSE (Root Mean Squared Error): {rmse:.4f}\n"
+                f"R² Score: {r2:.4f}"
+            )
+
             # 散布図を描画
             plt.figure(figsize=(6, 5))
             sns.scatterplot(x=pred_df["answer"], y=pred_df["predict"], alpha=0.6)
-            plt.plot([pred_df["answer"].min(), pred_df["answer"].max()], 
-                    [pred_df["answer"].min(), pred_df["answer"].max()], 
-                    color="red", linestyle="--")  # y=xの基準線
+            plt.plot(
+                [pred_df["answer"].min(), pred_df["answer"].max()],
+                [pred_df["answer"].min(), pred_df["answer"].max()],
+                color="red", linestyle="--"
+            )
             plt.xlabel("Actual Values")
             plt.ylabel("Predicted Values")
             plt.title("Actual vs Predicted")
             plt.grid(True)
 
-            # 画像を保存
-            plt.savefig(os.path.join(self.args.experiment_dir, "regression_results.png"), dpi=300, bbox_inches="tight")
+            # 画像保存
+            plt.savefig(os.path.join(self.args.save_dir, "regression_results.png"), dpi=300, bbox_inches="tight")
             plt.close()
+
             return pred_df
+
 
         else:
             pred_df["predict"] = 1 / (1 + np.exp(-pred_df["predict"]))
@@ -116,13 +136,15 @@ class Evaluator_MLP():
             false_negative_rate = FN / (TP + FN) if (TP + FN) > 0 else 0
 
             conf_matrix_data = [[TP, FN], [FP, TN]]
-            print(f"AUROC: {auroc:.4f}")
-            print(f"Accuracy: {accuracy:.4f}")
-            print(f"Precision: {precision:.4f}")
-            print(f"Recall (Sensitivity): {recall:.4f}")
-            print(f"Specificity: {specificity:.4f}")
-            print(f"False Positive Rate (FPR): {false_positive_rate:.4f}")
-            print(f"False Negative Rate (FNR): {false_negative_rate:.4f}")
+            logging.info(
+                f"AUROC: {auroc:.4f}\n"
+                f"Accuracy: {accuracy:.4f}\n"
+                f"Precision: {precision:.4f}\n"
+                f"Recall (Sensitivity): {recall:.4f}\n"
+                f"Specificity: {specificity:.4f}\n"
+                f"False Positive Rate (FPR): {false_positive_rate:.4f}\n"
+                f"False Negative Rate (FNR): {false_negative_rate:.4f}"
+            )        
         
             labels = ["Positive", "Negative"]
             plt.figure(figsize=(5, 4))
@@ -132,7 +154,7 @@ class Evaluator_MLP():
             plt.xlabel("Predicted")
             plt.ylabel("Actual")
             plt.title("Confusion Matrix")
-            plt.savefig(os.path.join(self.args.experiment_dir,"confusion_matrix.png"), dpi=300, bbox_inches="tight")
+            plt.savefig(os.path.join(self.args.save_dir,"confusion_matrix.png"), dpi=300, bbox_inches="tight")
             plt.close()
 
             return pred_df
@@ -144,7 +166,7 @@ def main():
     model = TransformerLatent_MLP(args)
     evaluator = Evaluator_MLP(model,args)
     results = evaluator.evaluate(test_data)
-    results.to_csv(os.path.join(args.experiment_dir,"evaluate_result_mlp.csv"))
+    results.to_csv(os.path.join(args.save_dir,"evaluate_result_mlp.csv"))
     
 
 if __name__ == "__main__":

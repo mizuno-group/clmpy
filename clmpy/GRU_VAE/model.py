@@ -47,6 +47,7 @@ class Encoder(nn.Module):
         dropout: float [0,1], Dropout ratio
         """
         super().__init__()
+        
         self.enc_gru_layer = config.enc_gru_layer
         self.vocab_size = config.vocab_size
         self.embedding_dim = config.embedding_dim
@@ -111,7 +112,60 @@ class Decoder(nn.Module):
         hidden = self.linear(state)
         output, states = self.gru2out(x,hidden)
         return output, states
-    
+
+
+class downstream_MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.latent_dim = config.latent_dim
+        self.activation = nn.ReLU()
+
+        # Dropout の割合 (0以上なら適用)
+        self.dropout_rate = config.dropout
+
+        # バッチ正規化の有無 (Trueなら適用)
+        self.use_batch_norm = config.batch_norm
+
+        # 各層のユニット数
+        layer_dim = config.layer_dim
+        layer_dim.insert(0, self.latent_dim)
+
+        # Linear 層
+        self.linear = nn.ModuleList([
+            nn.Linear(layer_dim[i], layer_dim[i+1]) for i in range(len(layer_dim)-1)
+        ])
+
+        # Batch Normalization 層 (フラグが True の場合のみ)
+        if self.use_batch_norm:
+            self.batch_norm = nn.ModuleList([
+                nn.BatchNorm1d(layer_dim[i+1]) for i in range(len(layer_dim)-1)
+            ])
+        else:
+            self.batch_norm = None
+
+        # Dropout 層 (0 以上の値が設定されている場合のみ)
+        if self.dropout_rate > 0:
+            self.dropout = nn.ModuleList([
+                nn.Dropout(self.dropout_rate) for _ in range(len(layer_dim)-1)
+            ])
+        else:
+            self.dropout = None  # Dropout を適用しない場合は None
+
+        # 最終分類層
+        self.classifier = nn.Linear(layer_dim[-1], 1)
+
+    def forward(self, x):
+        for i, v in enumerate(self.linear):
+            x = v(x)
+            if self.batch_norm and x.shape[0] > 1:  # バッチサイズが 1 のときは BatchNorm をスキップ
+                x = self.batch_norm[i](x)
+            x = self.activation(x)  # 活性化関数
+            if self.dropout:  # Dropout が有効なら適用
+                x = self.dropout[i](x)
+        x = self.classifier(x)
+        return x
+
 
 class GRUVAE(nn.Module):
     def __init__(self,config):
@@ -126,6 +180,21 @@ class GRUVAE(nn.Module):
         out, hidden = self.decoder(y,z)
         return out, mu, log_var
 
+class GRUVAE_MLP(nn.Module):
+    def __init__(self,config):
+        super().__init__()
+        self.encoder = Encoder(config)
+        self.sampling = Sampling()
+        self.decoder = Decoder(config)
+        self.mlp = downstream_MLP(config)
+
+
+    def forward(self,x,y):
+        mu, log_var = self.encoder(x)
+        z = self.sampling(mu,log_var) # [B, H]
+        out, hidden = self.decoder(y,z)
+        out_d = self.mlp(mu)
+        return out, out_d, mu, log_var
 
 
 

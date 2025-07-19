@@ -16,6 +16,7 @@ from ..preprocess import *
 from ..utils import plot_loss
 
 import warnings
+import logging
 
 warnings.simplefilter("ignore", FutureWarning)
 warnings.simplefilter("ignore", UserWarning)
@@ -27,7 +28,10 @@ def set_seed(seed):
 def get_args():
     parser = ArgumentParser()
     parser.add_argument("--config",type=FileType(mode="r"),default=None)
-    parser.add_argument("--model_path",type=str, default=None) #configに書くのもOK
+    parser.add_argument("--model_path",type=str, default=None)
+    parser.add_argument("--train_data",type=str, default=None)
+    parser.add_argument("--valid_data",type=str, default=None)
+    parser.add_argument("--save_dir",type=str, default=None) 
     args = parser.parse_args()
     config_dict = yaml.load(args.config,Loader=yaml.FullLoader)
     arg_dict = args.__dict__
@@ -64,6 +68,8 @@ class Trainer():
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.es = es
+        self.save_dir = args.save_dir
+
         self.steps_run = 0
         self.ckpt_path = os.path.join(args.experiment_dir,"checkpoint.pt")
         if os.path.exists(self.ckpt_path):
@@ -114,11 +120,7 @@ class Trainer():
         los = l + self.gamma * loss_mlp
         assert (not np.isnan(l.item()))
 
-        try:
-            loss_mlp.backward()
-        except Exception as e:
-            print(f"Error in backward pass: {e}")
-
+        los.backward()
         self.optimizer.step()
         self.scheduler.step()
 
@@ -141,7 +143,7 @@ class Trainer():
         d_rounded = torch.round(torch.sigmoid(out_mlp)).long()
         judge = torch.eq(target_mlp, d_rounded).squeeze(1)  
         row = []
-        t_list = target_mlp.tolist()  # 事前にリスト化
+        t_list = target_mlp.tolist()  
         r_list = d_rounded.tolist()
         d_list = torch.sigmoid(out_mlp).tolist()
 
@@ -152,6 +154,15 @@ class Trainer():
 
     
     def _train(self,train_data,log=True):
+        if log:
+            logging.basicConfig(
+                level=logging.INFO,
+                format='%(asctime)s | %(levelname)s | %(message)s',
+                handlers=[
+                    logging.FileHandler(self.save_dir+"/training.log", mode='a'),  # ログファイル
+                    logging.StreamHandler()                         # コンソール出力
+                ]
+            )
         l1, l2 = [], []
         min_l2 = float("inf")
         end = False   
@@ -175,7 +186,7 @@ class Trainer():
                     mse = mean_squared_error(pred_df["answer"], pred_df["predict"])
                     r2 = r2_score(pred_df["answer"], pred_df["predict"])
                     
-                    end = self.es.step(mse)  # MSE が小さいほど良いので、そのまま early stopping に使用
+                    end = self.es.step(mse)
 
                     if len(l1) == 1 or l_v < min_l2:
                         self.best_model = self.model
@@ -185,9 +196,14 @@ class Trainer():
 
                     if log:
                         print(f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, MSE: {mse:.3f}, R²: {r2:.3f}")
+                        logging.info(
+                            f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, "
+                            f"MSE: {mse:.3f}, R²: {r2:.3f}"
+                        )
 
                     if end:
                         print(f"Early stopping at step {self.steps_run}")
+
 
                 else:  # 分類タスク (args.task == "classification")
                     TP = len(pred_df.query("round == True and answer == True"))
@@ -200,7 +216,7 @@ class Trainer():
                     precision = TP / (TP + FP) if (TP + FP) > 0 else 0
                     recall = TP / (TP + FN) if (TP + FN) > 0 else 0
 
-                    end = self.es.step(auroc)  # 分類では accuracy で early stopping
+                    end = self.es.step(auroc)  
 
                     if len(l1) == 1 or l_v < min_l2:
                         self.best_model = self.model
@@ -209,7 +225,11 @@ class Trainer():
                     self._save(self.ckpt_path, self.steps_run)
 
                     if log:
-                        print(f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, AUROC: {auroc:.3f}, Accuracy: {accuracy:.4f}, Precision: {precision:.4f}, Recall (Sensitivity): {recall:.4f}")
+                        logging.info(
+                            f"step {self.steps_run} | train_mlp_loss: {l_m:.3f}, valid_loss: {l_v:.3f}, "
+                            f"AUROC: {auroc:.3f}, Accuracy: {accuracy:.4f}, "
+                            f"Precision: {precision:.4f}, Recall (Sensitivity): {recall:.4f}"
+                        )
 
                     if end:
                         print(f"Early stopping at step {self.steps_run}")
@@ -231,11 +251,13 @@ class Trainer():
 def main():
     args = get_args()
     set_seed(args.seed)
+    if not os.path.exists(args.save_dir): 
+        os.makedirs(args.save_dir)
     print("loading data")
     train_data = pd.read_csv(args.train_data,index_col=0)
-    train_data = train_data[train_data["Class"]=="train"]
+
     valid_data = pd.read_csv(args.valid_data,index_col=0)
-    valid_data = valid_data[valid_data["Class"]=="valid"]
+
     model = TransformerLatent_MLP(args)
     criteria, criteria_mlp, optimizer, scheduler, es = load_train_objs_mlp(args,model,mode="max")
     print("train start")
@@ -243,8 +265,7 @@ def main():
     if args.model_path is not None:
         trainer._load(args.model_path)
     loss_t, loss_v = trainer.train(args)
-    if not os.path.exists(args.save_dir): # ディレクトリが存在するか確認
-        os.makedirs(args.save_dir)
+    
     torch.save(trainer.best_model.state_dict(),os.path.join(args.save_dir,"best_model.pt"))
     os.remove(trainer.ckpt_path)
 

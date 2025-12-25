@@ -3,10 +3,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from transformers.models.gpt2.modeling_gpt2 import GPT2MLP
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention, GPT2MLP, GPT2Block
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
 from typing import Tuple, Optional
+
 
 DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
 
@@ -21,88 +22,50 @@ class Conv1D(nn.Module):
         x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
         return x.view(*size_out)
 
-# --- RPE Implementation Start ---
 
-class RelativePositionBias(nn.Module):
-    def __init__(self, num_buckets=32, max_distance=128, n_head=12):
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    """Rotates half the hidden dimensions of the input tensor."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Applies rotary positional embedding to query and key tensors."""
+    # q, k: [B, H, L, D]
+    # cos, sin: [1, 1, L, D] -> broadcast to [B, H, L, D]
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+class RotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, n_positions: int = 2048, base: int = 10000, device: Optional[torch.device] = None):
         super().__init__()
-        self.num_buckets = num_buckets
-        self.max_distance = max_distance
-        self.n_head = n_head
-        self.relative_attention_bias = nn.Embedding(num_buckets, n_head)
+        self.dim = dim
+        self.n_positions = n_positions
+        self.base = base
+        
+        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2).float().to(device) / self.dim))
+        self.register_buffer("inv_freq", inv_freq)
+        self._set_cos_sin_cache(seq_len=n_positions, device=self.inv_freq.device)
 
-    @staticmethod
-    def _relative_position_bucket(relative_position, num_buckets=32, max_distance=128):
-        """
-        Adapted from T5/Mesh Tensorflow.
-        Translate relative position to a bucket number for efficient lookup.
-        """
-        ret = 0
-        n = -relative_position
-        if num_buckets > 0:
-            ret += (n < 0).to(torch.long) * num_buckets // 2 # Offset for negative values
-            n = torch.abs(n)
-        else:
-            n = torch.max(n, torch.zeros_like(n))
+    def _set_cos_sin_cache(self, seq_len: int, device: torch.device):
+        self.max_seq_len_cached = seq_len
+        t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
+        freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        
+        self.register_buffer("cos_cached", emb.cos()[None, None, :, :], persistent=False)
+        self.register_buffer("sin_cached", emb.sin()[None, None, :, :], persistent=False)
 
-        # now n is in the range [0, inf)
-        max_exact = num_buckets // 2
-        is_small = n < max_exact
-
-        # The other half of the buckets are for logarithmically bigger distances
-        val_if_large = max_exact + (
-            torch.log(n.float() / max_exact) / math.log(max_distance / max_exact) * (num_buckets - max_exact)
-        ).to(torch.long)
-        
-        val_if_large = torch.min(val_if_large, torch.full_like(val_if_large, num_buckets - 1))
-        ret += torch.where(is_small, n, val_if_large)
-        return ret
-
-    def forward(self, query_length, key_length, device):
-        """
-        Compute binned relative position bias.
-        """
-        # Generate position indices
-        # query_pos: [query_length]
-        # key_pos:   [key_length]
-        # We need to handle the case where we have cached past keys.
-        # The query usually starts *after* the past keys.
-        
-        # In a standard forward pass without past: q=0..L, k=0..L
-        # With past: q=L_past..L_past+L_q, k=0..L_past+L_q
-        
-        # Note: To simplify, we assume the 'offset' is handled by the caller or
-        # we calculate relative distance based on the shapes. 
-        # Here we construct a matrix of shape [q_len, k_len]
-        
-        context_position = torch.arange(key_length, dtype=torch.long, device=device)[:, None]
-        memory_position = torch.arange(query_length, dtype=torch.long, device=device)[None, :] 
-        
-        # If we are decoding, the query is at the END of the key sequence.
-        # We need to know the offset. However, a simpler relative logic used in T5
-        # is just (key_idx - query_idx).
-        
-        # To handle 'past' correctly (where query is at the end), we need to offset the query indices.
-        # Offset = key_length - query_length
-        offset = key_length - query_length
-        memory_position = memory_position + offset
-        
-        relative_position = memory_position - context_position
-        # Shape: [key_length, query_length] -> transpose to [query_length, key_length]
-        relative_position = relative_position.transpose(0, 1)
-
-        rp_bucket = self._relative_position_bucket(
-            relative_position,
-            num_buckets=self.num_buckets,
-            max_distance=self.max_distance
+    def forward(self, x: torch.Tensor, seq_len: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        if seq_len > self.max_seq_len_cached:
+            self._set_cos_sin_cache(seq_len=seq_len, device=x.device)
+        return (
+            self.cos_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
+            self.sin_cached[:, :, :seq_len, ...].to(dtype=x.dtype),
         )
-        
-        # Shape: [q_len, k_len, n_head] -> permute to [1, n_head, q_len, k_len]
-        values = self.relative_attention_bias(rp_bucket)
-        values = values.permute(2, 0, 1).unsqueeze(0)
-        return values
 
-# --- RPE Implementation End ---
+# --- RoPE Implementation End ---
 
 class PositionalEncoding(nn.Module):
     def __init__(self, embedding_dim, dropout, max_len=500):
@@ -132,19 +95,16 @@ class Attention(GPT2Attention):
         self.c_proj = Conv1D(nx, nx)
         self.attn_dropout = nn.Dropout(config.dropout)
         
-        # --- RPE Integration ---
-        self.use_rpe = getattr(config, "use_rpe", False)
-        if self.use_rpe:
-            # RPE Defaults if not provided in config
-            rpe_buckets = getattr(config, "relative_attention_num_buckets", 32)
-            rpe_max_dist = getattr(config, "relative_attention_max_distance", 128)
+        # --- RoPE Integration ---
+        # configにuse_ropeがない場合はFalseとする安全策
+        self.use_rope = getattr(config, "use_rope", False)
+        if self.use_rope:
+            if self.head_dim % 2 != 0:
+                raise ValueError(f"head_dim ({self.head_dim}) must be even to use RoPE.")
             
-            self.rpe_bias = RelativePositionBias(
-                num_buckets=rpe_buckets,
-                max_distance=rpe_max_dist,
-                n_head=self.n_head
-            )
-
+            # rope_baseの取得（デフォルト10000）
+            rope_base = getattr(config, "rope_base", 10000)
+            self.rotary_emb = RotaryEmbedding(self.head_dim, n_positions=config.n_positions, base=rope_base)
     def _split_heads(self, x, num_heads, head_dim):
         # x: [B, L, D]
         B, L, D = x.size()
@@ -157,17 +117,11 @@ class Attention(GPT2Attention):
         x = x.permute(0, 2, 1, 3).contiguous()  # [B, L, H, D/H]
         return x.view(B, L, H * d)    
         
-    def _attn(self, q, k, v, attention_mask=None, rpe_bias=None):
+    def _attn(self, q, k, v, attention_mask=None):
         # q, k, v: [B, H, L, D_head]
         # Transpose k for matmul: [B, H, D_head, L]
         w = torch.matmul(q, k.transpose(-2, -1)) 
         w = w / math.sqrt(v.size(-1))
-        
-        # --- Apply RPE Bias ---
-        if rpe_bias is not None:
-            # rpe_bias shape: [1, H, L_q, L_k]
-            w = w + rpe_bias
-
         if attention_mask is not None:
             w = w + attention_mask
         w = nn.Softmax(dim=-1)(w)
@@ -185,6 +139,22 @@ class Attention(GPT2Attention):
         key = self._split_heads(key, self.n_head, self.head_dim)
         value = self._split_heads(value, self.n_head, self.head_dim)
 
+        # --- RoPE Application ---
+        if self.use_rope:
+            # layer_past[0] shape is [B, H, L_past, D_head] (stored in logical order)
+            past_length = 0 if layer_past is None else layer_past[0].size(-2)
+            query_len = query.shape[2]
+            
+            # Get cos, sin
+            cos, sin = self.rotary_emb(x=value, seq_len=past_length + query_len)
+            
+            # Apply RoPE to CURRENT query and key
+            # Slice cos/sin for the current positions
+            current_cos = cos[:, :, past_length : past_length + query_len, :]
+            current_sin = sin[:, :, past_length : past_length + query_len, :]
+            
+            query, key = apply_rotary_pos_emb(query, key, current_cos, current_sin)
+
         # Handle Past (Caching)
         if layer_past is not None:
             # Assuming layer_past stores [key, value] in shape [B, H, L, D_head]
@@ -195,17 +165,8 @@ class Attention(GPT2Attention):
         # Save present for next step (Keep shape [B, H, L, D_head])
         present = (key, value) 
 
-        # --- Calculate RPE Bias ---
-        rpe_bias_tensor = None
-        if self.use_rpe:
-            query_len = query.size(2)
-            key_len = key.size(2)
-            # The bias module handles the relative indexing
-            rpe_bias_tensor = self.rpe_bias(query_len, key_len, device=query.device)
-
         # Attention Calculation
-        # Pass rpe_bias_tensor to _attn
-        a, attn_weights = self._attn(query, key, value, attention_mask, rpe_bias=rpe_bias_tensor) 
+        a, attn_weights = self._attn(query, key, value, attention_mask) # [B, H, L, D_head]
 
         # Merge heads
         a = self._merge_heads(a, self.n_head, self.head_dim) # [B, L, D]
@@ -218,14 +179,13 @@ class Attention(GPT2Attention):
 
 class TransformerBlock(nn.Module):
     def __init__(self, config, scale=False):
+        # GPT2Configを作成し、元のconfigから属性をコピー
         gpt2config = GPT2Config(**config.__dict__)
         gpt2config.n_embd = config.embedding_dim
-        
-        # Propagate RPE config
-        if hasattr(config, 'use_rpe'):
-            gpt2config.use_rpe = config.use_rpe
-            gpt2config.relative_attention_num_buckets = getattr(config, 'relative_attention_num_buckets', 32)
-            gpt2config.relative_attention_max_distance = getattr(config, 'relative_attention_max_distance', 128)
+        # カスタムconfigにuse_ropeがある場合、gpt2configにも渡るように保証
+        if hasattr(config, 'use_rope'):
+            gpt2config.use_rope = config.use_rope
+            gpt2config.rope_base = getattr(config, 'rope_base', 10000)
 
         super().__init__()
         nx = config.embedding_dim
@@ -247,20 +207,20 @@ class Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         nx = config.embedding_dim
-        self.use_rpe = getattr(config, "use_rpe", False)
+        self.use_rope = getattr(config, "use_rope", False)
 
         self.wte = nn.Embedding(config.vocab_size, nx)
         
-        # If using RPE, we usually disable Absolute Positional Encoding
-        if self.use_rpe:
-            self.wpe = nn.Identity() 
+        # RoPEを使う場合、絶対位置エンコーディング(PositionalEncoding)は通常不要です
+        if self.use_rope:
+            self.wpe = nn.Identity() # 何もしない層
         else:
             self.wpe = PositionalEncoding(nx, config.dropout, max_len=config.n_positions)
             
         self.drop = nn.Dropout(config.dropout)
         self.h = nn.ModuleList([TransformerBlock(config, scale=True) for _ in range(config.n_layer)])
         self.ln_f = nn.LayerNorm(nx, eps=config.layer_norm_epsilon)
-        
+        # (Memory pool関連は省略せずそのまま記述)
         self.ln_mem1 = nn.LayerNorm(nx)
         self.ln_mem2 = nn.LayerNorm(nx)
         self.ln_mem3 = nn.LayerNorm(nx)
@@ -272,6 +232,7 @@ class Encoder(nn.Module):
         return pad_array, torch.where(pad_array_ == True, float("-inf"), 0.0)
     
     def memory_pool(self, memory, pad_array):
+        # 元のコードと同じ
         pad_array = pad_array.unsqueeze(-1)
         masked = memory.masked_fill(pad_array, -torch.inf)
         padding_mask = ~pad_array
@@ -289,7 +250,8 @@ class Encoder(nn.Module):
             
         input_embeds = self.wte(x)
         
-        if self.use_rpe:
+        # wpeがIdentity(RoPE使用時)なら埋め込みそのまま、そうでなければ位置エンコーディング加算
+        if self.use_rope:
              hidden_states = self.drop(input_embeds)
         else:
              hidden_states = self.wpe(input_embeds)
@@ -311,11 +273,12 @@ class Decoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         nx = config.embedding_dim
-        self.use_rpe = getattr(config, "use_rpe", False)
+        self.use_rope = getattr(config, "use_rope", False)
 
         self.wte = nn.Embedding(config.vocab_size, nx)
         
-        if self.use_rpe:
+        # RoPE切り替え
+        if self.use_rope:
             self.wpe = nn.Identity()
         else:
             self.wpe = PositionalEncoding(nx, config.dropout, max_len=config.n_positions)
@@ -338,12 +301,12 @@ class Decoder(nn.Module):
         if layer_past is None:
             past = [None] * len(self.h)
         else:
-            past = layer_past 
+            past = layer_past # Decoderのpastの渡し方を修正
             
         attention_mask = self.create_dec_attention_mask(x)
         input_embeds = self.wte(x)
         
-        if self.use_rpe:
+        if self.use_rope:
             hidden_states = input_embeds
         else:
             hidden_states = self.wpe(input_embeds)
@@ -353,16 +316,19 @@ class Decoder(nn.Module):
 
         presents = ()
         for i, (block, layer_past_item) in enumerate(zip(self.h, past)):
+            # Encoderとの違い: Decoderはautoregressiveなのでpastを正しく渡す
             outputs = block(hidden_states, layer_past=layer_past_item, attention_mask=attention_mask)
             hidden_states, present = outputs[:2]
             presents = presents + (present,)
             
         hidden_states = self.ln_f(hidden_states)
         hidden_states = self.output_fc(hidden_states)
+        # Return hidden_states and presents (for caching) if needed, but original only returned hidden
         return hidden_states 
 
-# The wrappers (TransformerLatent, downstream_MLP, etc.) remain unchanged.
-# Ensure your 'config' object passed to the model has 'use_rpe = True'.
+# TransformerLatentなどの上位クラスはConfigに 'use_rope=True' を追加すればそのまま動作します。
+
+
 class TransformerLatent(nn.Module):
     def __init__(self,config):
         super().__init__()
@@ -375,26 +341,39 @@ class TransformerLatent(nn.Module):
         outputs = self.decoder(tgt,latent,layer_past=past)
         return outputs, latent
     
+
 class downstream_MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.latent_dim = config.latent_dim
         self.activation = nn.ReLU()
+
+        # Dropout の割合 (0以上なら適用)
         self.dropout_rate = config.dropout
+
+        # バッチ正規化の有無 (Trueなら適用)
         self.use_batch_norm = config.batch_norm
         self.use_layer_norm = config.layer_norm
+
+        # 各層のユニット数
         layer_dim = config.layer_dim
         layer_dim.insert(0, self.latent_dim)
+
+        # Linear 層
         self.linear = nn.ModuleList([
             nn.Linear(layer_dim[i], layer_dim[i+1]) for i in range(len(layer_dim)-1)
         ])
+
+        # Batch Normalization 層 (フラグが True の場合のみ)
         if self.use_batch_norm:
             self.batch_norm = nn.ModuleList([
                 nn.BatchNorm1d(layer_dim[i+1]) for i in range(len(layer_dim)-1)
             ])
         else:
             self.batch_norm = None
+
+        # Layer Normalization 層 (フラグが True の場合のみ)
 
         if self.use_layer_norm:
             self.layer_norm = nn.ModuleList([
@@ -403,19 +382,29 @@ class downstream_MLP(nn.Module):
         else:
             self.layer_norm = None
 
+
+        # Dropout 層 (0 以上の値が設定されている場合のみ)
         if self.dropout_rate > 0:
             self.dropout = nn.ModuleList([
                 nn.Dropout(self.dropout_rate) for _ in range(len(layer_dim)-1)
             ])
         else:
-            self.dropout = None 
+            self.dropout = None  # Dropout を適用しない場合は None
+
+        # 最終分類層
         self.classifier = nn.Linear(layer_dim[-1], 1)
 
     def forward(self, x):
         for i, v in enumerate(self.linear):
             x = v(x)
-            x = self.activation(x) 
-            if self.dropout: 
+            # if self.use_batch_norm and x.shape[0] > 1:  # バッチサイズが 1 のときは BatchNorm をスキップ
+            #     x = self.batch_norm[i](x)
+            # LayerNorm がある場合は適用
+            # if self.use_layer_norm:
+            #     x = self.layer_norm[i](x)
+    
+            x = self.activation(x)  # 活性化関数
+            if self.dropout:  # Dropout が有効なら適用
                 x = self.dropout[i](x)
         x = self.classifier(x)
         return x
@@ -428,8 +417,12 @@ class TransformerLatent_MLP(nn.Module):
         self.decoder = Decoder(config)
         self.mlp = downstream_MLP(config)
 
+
     def forward(self,src,tgt,past=None):
         latent = self.encoder(src)
+   
         out = self.decoder(tgt,latent,layer_past=past)
+
         out_d = self.mlp(latent)
+
         return out, out_d, latent

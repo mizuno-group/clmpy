@@ -1,47 +1,45 @@
 # -*- coding: utf-8 -*-
-# 240620
+# 240527
 
 import os
 from argparse import ArgumentParser, FileType
 import yaml
 import time
 import wandb
-
-import pandas as pd
-
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from .model import GRU
+from .model import TransformerLatent
 from ..preprocess import *
 from ..model_helper import LossContainer
 from ..utils import set_seed
 from ..get_args import get_argument
 
+# Project that the run is recorded to
+project = "clmpy-main"
 class Trainer():
     def __init__(
         self,
         args,
         model: nn.Module,
+        train_data: pd.DataFrame,
         valid_data: pd.DataFrame,
         criteria: nn.Module,
         optimizer: optim.Optimizer,
         scheduler: optim.lr_scheduler.LRScheduler,
-        es,
+        es
     ):
         self.args = args
         self.model = model.to(args.device)
-        #self.train_data = prep_train_data(args,train_data)
+        self.train_data = train_data
         self.valid_data = prep_valid_data(args,valid_data)
         self.criteria = criteria
         self.optimizer = optimizer
         self.scheduler = scheduler
         self.es = es
         self.steps_run = 0
-        self.loss = LossContainer()
         self.ckpt_path = os.path.join(args.experiment_dir,"checkpoint.pt")
         if os.path.exists(self.ckpt_path):
             self._load(self.ckpt_path)
@@ -75,6 +73,7 @@ class Trainer():
         target = target.to(self.device)
         out, _ = self.model(source,target[:-1,:])
         l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        assert (not np.isnan(l.item()))
         l.backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -100,8 +99,8 @@ class Trainer():
                 for v, w in self.valid_data:
                     l_v.append(self._valid_batch(v,w))
                 l_v = np.mean(l_v)
-                self.loss.train_add("reconstruction",l_t)
-                self.loss.valid_add("reconstruction",l_v)
+                # self.loss.train_add("reconstruction",l_t)
+                # self.loss.valid_add("reconstruction",l_v)
                 wandb.log({
                     "train_loss": l_t,
                     "valid_loss": l_v,
@@ -114,7 +113,7 @@ class Trainer():
                     min_l2 = l_v
                 self._save(self.ckpt_path,self.steps_run)
                 if self.args.loss_log == True:
-                    print(f"step {self.steps_run} | train_loss: {np.round(l_t,5)}, valid_loss: {np.round(l_v,5)}")
+                    print(f"step {self.steps_run} | train_loss: {l_t}, valid_loss: {l_v}")
                 if end:
                     print(f"Early stopping at step {self.steps_run}")
                     return end
@@ -123,52 +122,38 @@ class Trainer():
                 return end
         return end
     
-    def train(self,args):
+    def train(self):
         end = False
-        i = 0
-        print("Loading train data...")
-        raw_train_df = pd.read_csv(args.train_path, index_col=0)
-        train_loader = prep_train_data(args, raw_train_df)
         while end == False:
-            # if i == len(self.train_data):
-            #     i = 0
-            #train_data = pd.read_csv(self.train_data[i],index_col=0)
-            # prep済みのDataLoaderを渡す
-            end = self._train(train_loader)
+            train_data = prep_train_data(self.args,self.train_data)
+            end = self._train(train_data)
             if self.args.train_one_cycle == True:
                 end = True
-                
     
-
 def main():
     args = get_argument()
     set_seed(args.seed)
+    print("loading data")
+    run_id = "local_v1_001" 
     wandb.init(
-        project="clmpy-GRU", 
+        project="clmpy-RoPE", 
+        id=run_id, 
+        resume="allow", 
         config=args,
         name=args.project_name # 任意: 実行名を指定（例: seed値を含める）
-    ) # <--- 追加: プロジェクトの初期化
-    
-    print("loading data")
-    valid_data = pd.read_csv(args.valid_path,index_col=0) 
-    model = GRU(args)
-    wandb.watch(model, log="all", log_freq=100)
+    ) 
+    train_data = pd.read_csv(args.train_path,index_col=0)
+    valid_data = pd.read_csv(args.valid_path,index_col=0)
+    model = TransformerLatent(args)
     criteria, optimizer, scheduler, es = load_train_objs(args,model)
+    wandb.watch(model, log="all", log_freq=100)
     print("train start")
-    trainer = Trainer(args,model,valid_data,criteria,optimizer,scheduler,es)
-    trainer.train(args)
-    save_path = os.path.join(args.experiment_dir, "best_model.pt") # <--- パスを変数に格納
-    if trainer.best_model is not None:
-        torch.save(trainer.best_model.state_dict(), save_path)
-        print(f"Best model saved to {save_path}")
-        wandb.save(save_path) # <--- 修正: 正しいパス変数を渡す
-    else:
-        print("No best model found (maybe early stopping triggered immediately?)")
-
+    trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
+    trainer.train()
+    save_path = os.path.join(args.experiment_dir, "best_model.pt")
+    torch.save(trainer.best_model.state_dict(),save_path)
+    wandb.save(save_path)
     wandb.finish()
-    #if args.plot:
-    #   plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
-
 
 if __name__ == "__main__":
     ts = time.perf_counter()

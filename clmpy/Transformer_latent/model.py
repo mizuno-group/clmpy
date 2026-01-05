@@ -12,6 +12,17 @@ from transformers.models.gpt2.modeling_gpt2 import *
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
 
 
+class Conv1D(nn.Module):
+    def __init__(self, out_dim, in_dim):
+        super().__init__()
+        self.weight = nn.Parameter(torch.randn(in_dim, out_dim))
+        self.bias = nn.Parameter(torch.zeros(out_dim))
+
+    def forward(self, x):
+        size_out = x.size()[:-1] + (self.weight.size(1), )
+        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
+        return x.view(*size_out)
+
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
         super().__init__()

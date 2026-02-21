@@ -5,7 +5,6 @@ import numpy as np
 import math
 import torch
 
-
 """
 def plot_loss(train,valid,train2=[],valid2=[],dir_name=""):
     fig = plt.figure(figsize=(12,7))

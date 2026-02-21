@@ -5,9 +5,6 @@ import os
 from argparse import ArgumentParser, FileType
 import yaml
 import time
-import wandb
-
-import pandas as pd
 
 import numpy as np
 import torch
@@ -26,6 +23,7 @@ class Trainer():
         self,
         args,
         model: nn.Module,
+        train_data: pd.DataFrame,
         valid_data: pd.DataFrame,
         criteria: nn.Module,
         optimizer: optim.Optimizer,
@@ -34,7 +32,7 @@ class Trainer():
     ):
         self.args = args
         self.model = model.to(args.device)
-        #self.train_data = prep_train_data(args,train_data)
+        self.train_data = train_data
         self.valid_data = prep_valid_data(args,valid_data)
         self.criteria = criteria
         self.optimizer = optimizer
@@ -102,12 +100,6 @@ class Trainer():
                 l_v = np.mean(l_v)
                 self.loss.train_add("reconstruction",l_t)
                 self.loss.valid_add("reconstruction",l_v)
-                wandb.log({
-                    "train_loss": l_t,
-                    "valid_loss": l_v,
-                    "lr": self.optimizer.param_groups[0]['lr'], # 学習率も記録すると便利
-                    "step": self.steps_run
-                }) #
                 end = self.es.step(l_v)
                 if l_v < min_l2:
                     self.best_model = self.model
@@ -123,52 +115,29 @@ class Trainer():
                 return end
         return end
     
-    def train(self,args):
+    def train(self):
         end = False
-        i = 0
-        print("Loading train data...")
-        raw_train_df = pd.read_csv(args.train_path, index_col=0)
-        train_loader = prep_train_data(args, raw_train_df)
         while end == False:
-            # if i == len(self.train_data):
-            #     i = 0
-            #train_data = pd.read_csv(self.train_data[i],index_col=0)
-            # prep済みのDataLoaderを渡す
-            end = self._train(train_loader)
+            train_data = prep_train_data(self.args,self.train_data)
+            end = self._train(train_data)
             if self.args.train_one_cycle == True:
                 end = True
-                
     
 
 def main():
     args = get_argument()
     set_seed(args.seed)
-    wandb.init(
-        project="clmpy-GRU", 
-        config=args,
-        name=args.project_name # 任意: 実行名を指定（例: seed値を含める）
-    ) # <--- 追加: プロジェクトの初期化
-    
     print("loading data")
+    train_data = pd.read_csv(args.train_path,index_col=0)
     valid_data = pd.read_csv(args.valid_path,index_col=0) 
     model = GRU(args)
-    wandb.watch(model, log="all", log_freq=100)
     criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
-    trainer = Trainer(args,model,valid_data,criteria,optimizer,scheduler,es)
-    trainer.train(args)
-    save_path = os.path.join(args.experiment_dir, "best_model.pt") # <--- パスを変数に格納
-    if trainer.best_model is not None:
-        torch.save(trainer.best_model.state_dict(), save_path)
-        print(f"Best model saved to {save_path}")
-        wandb.save(save_path) # <--- 修正: 正しいパス変数を渡す
-    else:
-        print("No best model found (maybe early stopping triggered immediately?)")
-
-    wandb.finish()
+    trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
+    trainer.train()
+    torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
     #if args.plot:
     #   plot_loss(loss_t,loss_v,dir_name=args.experiment_dir)
-
 
 if __name__ == "__main__":
     ts = time.perf_counter()

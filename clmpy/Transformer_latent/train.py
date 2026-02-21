@@ -5,7 +5,7 @@ import os
 from argparse import ArgumentParser, FileType
 import yaml
 import time
-import wandb
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -17,8 +17,6 @@ from ..model_helper import LossContainer
 from ..utils import set_seed
 from ..get_args import get_argument
 
-# Project that the run is recorded to
-project = "clmpy-main"
 class Trainer():
     def __init__(
         self,
@@ -99,14 +97,8 @@ class Trainer():
                 for v, w in self.valid_data:
                     l_v.append(self._valid_batch(v,w))
                 l_v = np.mean(l_v)
-                # self.loss.train_add("reconstruction",l_t)
-                # self.loss.valid_add("reconstruction",l_v)
-                wandb.log({
-                    "train_loss": l_t,
-                    "valid_loss": l_v,
-                    "lr": self.optimizer.param_groups[0]['lr'], # 学習率も記録すると便利
-                    "step": self.steps_run
-                }) #
+                self.loss.train_add("reconstruction",l_t)
+                self.loss.valid_add("reconstruction",l_v)
                 end = self.es.step(l_v)
                 if l_v < min_l2:
                     self.best_model = self.model
@@ -134,26 +126,15 @@ def main():
     args = get_argument()
     set_seed(args.seed)
     print("loading data")
-    run_id = "RPE_v1_001" 
-    wandb.init(
-        project="clmpy-RoPE", 
-        id=run_id, 
-        resume="allow", 
-        config=args,
-        name=args.project_name # 任意: 実行名を指定（例: seed値を含める）
-    ) 
-    train_data = pd.read_csv(args.train_path,index_col=0)
-    valid_data = pd.read_csv(args.valid_path,index_col=0)
+    train_data = pd.read_csv(args.train_data,index_col=0)
+    valid_data = pd.read_csv(args.valid_data,index_col=0)
     model = TransformerLatent(args)
     criteria, optimizer, scheduler, es = load_train_objs(args,model)
-    wandb.watch(model, log="all", log_freq=100)
     print("train start")
     trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
     trainer.train()
-    save_path = os.path.join(args.experiment_dir, "best_model.pt")
-    torch.save(trainer.best_model.state_dict(),save_path)
-    wandb.save(save_path)
-    wandb.finish()
+    torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
+
 
 if __name__ == "__main__":
     ts = time.perf_counter()

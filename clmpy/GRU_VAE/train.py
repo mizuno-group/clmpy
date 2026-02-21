@@ -23,6 +23,7 @@ class Trainer():
         self,
         args,
         model: nn.Module,
+        train_data: pd.DataFrame,
         valid_data: pd.DataFrame,
         criteria: nn.Module,
         optimizer: optim.Optimizer,
@@ -122,15 +123,9 @@ class Trainer():
 
     def train(self,args):
         end = False
-        i = 0
         while end == False:
-            if i == len(self.train_data):
-                i = 0
-            train_data = pd.read_csv(self.train_data[i],index_col=0)
-            train_data = prep_train_data(args,train_data)
-            
+            train_data = prep_train_data(args,self.train_data)
             end = self._train(args,train_data)
-            i += 1
             if self.args.train_one_cycle == True:
                 end == True
     
@@ -138,11 +133,12 @@ def main():
     args = get_argument()
     set_seed(args.seed)
     print("loading data")
+    train_data = pd.read_csv(args.train_data,index_col=0)
     valid_data = pd.read_csv(args.valid_data,index_col=0) 
     model = GRUVAE(args)
     criteria, optimizer, scheduler, es = load_train_objs(args,model)
     print("train start")
-    trainer = Trainer(args,model,valid_data,criteria,optimizer,scheduler,es)
+    trainer = Trainer(args,model,train_data,valid_data,criteria,optimizer,scheduler,es)
     trainer.train(args)
     torch.save(trainer.best_model.state_dict(),os.path.join(args.experiment_dir,"best_model.pt"))
 

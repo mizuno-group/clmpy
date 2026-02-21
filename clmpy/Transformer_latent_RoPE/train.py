@@ -134,7 +134,7 @@ def main():
     args = get_argument()
     set_seed(args.seed)
     print("loading data")
-    run_id = "RoPE_v1_001" 
+    run_id = "RoPE_v2_001" 
     wandb.init(
         project="clmpy-RoPE", 
         id=run_id, 

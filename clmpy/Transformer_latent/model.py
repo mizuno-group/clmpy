@@ -7,21 +7,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
-from transformers.modeling_utils import Conv1D
-from transformers.models.gpt2.modeling_gpt2 import *
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention, GPT2MLP, GPT2Block
 from transformers.models.gpt2.configuration_gpt2 import GPT2Config
-
-
-class Conv1D(nn.Module):
-    def __init__(self, out_dim, in_dim):
-        super().__init__()
-        self.weight = nn.Parameter(torch.randn(in_dim, out_dim))
-        self.bias = nn.Parameter(torch.zeros(out_dim))
-
-    def forward(self, x):
-        size_out = x.size()[:-1] + (self.weight.size(1), )
-        x = torch.addmm(self.bias, x.view(-1, x.size(-1)), self.weight)
-        return x.view(*size_out)
+from transformers.models.gpt2.modeling_gpt2 import GPT2Attention
+DEVICE = "cuda:0" if torch.cuda.is_available() else "cpu"
+from transformers.pytorch_utils import Conv1D
 
 class PositionalEncoding(nn.Module):
     def __init__(self,embedding_dim,dropout,max_len=500):
@@ -55,6 +45,16 @@ class Attention(GPT2Attention):
         self.c_proj = Conv1D(nx,nx)
         self.attn_dropout = nn.Dropout(config.dropout)
 
+    def _split_heads(self, tensor, num_heads, attn_head_size):
+        new_shape = tensor.size()[:-1] + (num_heads, attn_head_size)
+        tensor = tensor.view(new_shape)
+        return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+
+    def _merge_heads(self, tensor, num_heads, attn_head_size):
+        tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        new_shape = tensor.size()[:-2] + (num_heads * attn_head_size,)
+        return tensor.view(new_shape)
+    
     def _attn(self,q,k,v,attention_mask=False):
         w = torch.matmul(q,k) # [B,H,L,L]
         w = w / math.sqrt(v.size(-1))
@@ -82,6 +82,8 @@ class Attention(GPT2Attention):
         a = self.attn_dropout(self.c_proj(self._merge_heads(a,self.n_head,self.head_dim)))
         outputs = [a.transpose(0,1),present]
         return outputs # [L,B,D]
+    
+
     
 class TransformerBlock(nn.Module):
     def __init__(self,config,scale=False):

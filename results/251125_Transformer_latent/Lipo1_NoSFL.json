@@ -1,0 +1,1 @@
+{"smallest_loss": 0.7691360976740762, "best_params": {"gamma": 0.00037517861939717764, "max_depth": 15, "min_child_weight": 7, "max_delta_step": 6, "subsample": 0.8403645038214083, "colsample_bytree": 0.7404803470417166, "lambda": 0.02173754538754215, "alpha": 3.3477830553110896e-08}, "best_score": 0.4138}

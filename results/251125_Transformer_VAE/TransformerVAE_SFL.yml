@@ -1,0 +1,36 @@
+# general
+batch_size: 32
+num_workers: 2
+token_path: /workspace/clmpy_miyabi/sample/tokens/zinc_SFL_tokens.txt
+SFL: True
+seed: 222
+log: True
+# model architecture
+embedding_dim: 256 # equal to latent dim
+n_positions: 200 # equal to max length
+n_layer: 8
+n_head: 8
+layer_norm_epsilon: 1.0e-5
+
+# train
+steps: 1000000
+plot: true
+dropout: 0
+max_lr: 2.0e-2
+warmup: 8000
+patience_step: 200
+buckets_min: 20
+buckets_max: 150
+buckets_step: 10
+train_data: /workspace/clmpy_miyabi/sample_data/mlp/data_unimol_200/BACE.csv
+valid_data: /workspace/clmpy_miyabi/sample_data/mlp/data_unimol_200/BACE.csv
+valid_step_range: 20
+beta: 0.01
+
+latent_dim: 256
+layer_dim: [256, 512]
+task: binary_classification
+gamma: 10
+dropout_mlp: 0.1
+batch_norm: True
+#save_dir:  /workspace/clmpy_miyabi/result/model_nemoto/251031_Transformer_VAE/BACE2

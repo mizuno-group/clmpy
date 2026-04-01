@@ -2,8 +2,8 @@ seed: 123
 num_workers: 2
 device: "cuda"
 
-train_path: /work/ga97/a97002/GRU_VAE/data_zinc/train.csv
-valid_path: /work/ga97/a97002/GRU_VAE/data_zinc/test.csv
+train_path: /path/to/train.csv
+valid_path: /path/to/valid.csv
 token_path: ../tokens/zinc_SFL_tokens.txt
 SFL: true
 bucketing: true

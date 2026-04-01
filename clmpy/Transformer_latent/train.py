@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240527
+# 260401
 
 import os
 from argparse import ArgumentParser, FileType
@@ -63,27 +63,30 @@ class Trainer():
             "es_best": self.es.best
         }
         torch.save(ckpt,path)
-
-    def _train_batch(self,source,target):
+        
+    def _train_batch(self, source, target):
         self.model.train()
         self.optimizer.zero_grad()
         source = source.to(self.device)
         target = target.to(self.device)
-        out, _ = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        out, _ = self.model(source, target[:-1, :])
+        num_tokens = (target[1:, :] != 0).sum()
+        l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens        
         assert (not np.isnan(l.item()))
         l.backward()
         self.optimizer.step()
         self.scheduler.step()
         return l.item()
-    
-    def _valid_batch(self,source,target):
+
+    def _valid_batch(self, source, target):
         self.model.eval()
         source = source.to(self.device)
         target = target.to(self.device)
+        
         with torch.no_grad():
-            out, _ = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+            out, _ = self.model(source, target[:-1, :])
+            num_tokens = (target[1:, :] != 0).sum()
+            l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens            
         return l.item()
     
     def _train(self,train_data):

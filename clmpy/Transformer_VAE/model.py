@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240620
+# 260401
 
 import math
 import numpy as np
@@ -99,7 +99,7 @@ class Encoder(nn.Module):
     def __init__(self,config):
         super().__init__()
         nx = config.embedding_dim
-        self.wte = nn.Embedding(config.vocab_size,nx)
+        self.wte = nn.Embedding(config.vocab_size, nx, padding_idx=0)
         self.wpe = PositionalEncoding(nx,config.dropout,max_len=config.n_positions)
         self.drop = nn.Dropout(config.dropout)
 

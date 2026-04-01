@@ -72,7 +72,8 @@ class Trainer():
         source = source.to(self.device)
         target = target.to(self.device)
         out, _ = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+        num_tokens = (target[1:, :] != 0).sum()
+        l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens        
         l.backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -84,7 +85,8 @@ class Trainer():
         target = target.to(self.device)
         with torch.no_grad():
             out, _ = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
+            num_tokens = (target[1:, :] != 0).sum()
+            l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens
         return l.item()
     
     def _train(self,train_data):

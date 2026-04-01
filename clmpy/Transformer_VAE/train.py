@@ -72,8 +72,7 @@ class Trainer():
         source = source.to(self.device)
         target = target.to(self.device)
         out, mu, log_var = self.model(source,target[:-1,:])
-        non_pad_mask = (target[1:, :] != 0)
-        num_tokens = non_pad_mask.sum() 
+        num_tokens = (target[1:, :] != 0).sum()
         l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens
         l2 = KLLoss(mu, log_var) / source.shape[1]
         (l + l2 * self.beta).backward()

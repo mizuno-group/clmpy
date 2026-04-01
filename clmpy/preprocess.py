@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240516
+# 260401
 
 import argparse
 import yaml
@@ -14,7 +14,7 @@ from .utils import EarlyStopping, warmup_schedule
 
 
 def load_train_objs(args,model,downstream=False):
-    criteria = nn.CrossEntropyLoss(reduction="sum")
+    criteria = nn.CrossEntropyLoss(reduction="sum", ignore_index=0)
     optimizer = optim.AdamW(model.parameters(),lr=args.max_lr)
     lr_schedule = warmup_schedule(args.warmup_step)
     scheduler = optim.lr_scheduler.LambdaLR(optimizer,lr_schedule)

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# 240527
+# 260401
 
 import os
 from argparse import ArgumentParser, FileType
@@ -72,8 +72,10 @@ class Trainer():
         source = source.to(self.device)
         target = target.to(self.device)
         out, mu, log_var = self.model(source,target[:-1,:])
-        l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
-        l2 = KLLoss(mu,log_var) / source.shape[1]
+        non_pad_mask = (target[1:, :] != 0)
+        num_tokens = non_pad_mask.sum() 
+        l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens
+        l2 = KLLoss(mu, log_var) / source.shape[1]
         (l + l2 * self.beta).backward()
         self.optimizer.step()
         self.scheduler.step()
@@ -85,8 +87,9 @@ class Trainer():
         target = target.to(self.device)
         with torch.no_grad():
             out, mu, log_var = self.model(source,target[:-1,:])
-            l = self.criteria(out.transpose(-2,-1),target[1:,:]) / source.shape[1]
-            l2 = KLLoss(mu,log_var) / source.shape[1]
+            num_tokens = (target[1:, :] != 0).sum()
+            l = self.criteria(out.transpose(-2, -1), target[1:, :]) / num_tokens
+            l2 = KLLoss(mu, log_var) / source.shape[1]
         return l.item(), l2.item()
     
     def _train(self,args,train_data):
